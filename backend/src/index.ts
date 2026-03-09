@@ -3,17 +3,21 @@ import config from "./config/environment.js";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { sequelize, initSequelize } from "./config/db.js";
+import { initModels } from "./models/index.js";
 
 export async function bootstrap(): Promise<void> {
   try {
     // 1. Initialize Sequelize
     initSequelize();
 
-    // 4. Authenticate DB
+    // 2. Authenticate DB
     await sequelize.authenticate();
     console.log("Database connection OK");
 
-    // 5. Sync models
+    // 3. Initialize models AFTER sequelize
+    initModels();
+
+    // 4. Sync models
     await sequelize.sync();
     console.log("Models synced with database");
   } catch (err) {

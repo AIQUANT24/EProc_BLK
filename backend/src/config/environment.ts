@@ -2,7 +2,7 @@
 import dotenv from "dotenv";
 
 const NODE_ENV = process.env.NODE_ENV || "development";
-console.log(`🌍 Loading Refi environment: ${NODE_ENV}`);
+console.log(`Loading environment: ${NODE_ENV}`);
 
 dotenv.config({ path: `.env.${NODE_ENV}` });
 dotenv.config({ path: ".env" });

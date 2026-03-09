@@ -1,0 +1,25 @@
+# 1. Downloaded Fabric Binaries and Configs
+# These are fetched via install-fabric.sh and shouldn't be tracked
+/bin/
+/builders/
+/config/
+
+# 2. Generated Cryptographic Material (Highly Sensitive!)
+# Contains private keys and certificates for your peers/orderers
+/network/organizations/peerOrganizations/
+/network/organizations/ordererOrganizations/
+
+# 3. Generated Channel Artifacts
+# These blocks and transaction files are created dynamically during setup
+/network/channel-artifacts/
+/network/system-genesis-block/*.block
+/network/system-genesis-block/*.pb
+
+# 4. Logs and Database State
+# Temporary state files
+/network/log.txt
+*.log
+/network/prometheus-grafana/grafana_db/grafana.db
+
+# 5. OS Generated Files
+.DS_Store

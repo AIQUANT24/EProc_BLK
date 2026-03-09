@@ -1,0 +1,40 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "NODE_ENV=production node dist/index.js",
+    "start:dev": "NODE_ENV=development node dist/index.js",
+    "start:test": "NODE_ENV=testing node dist/index.js",
+    "dev": "NODE_ENV=development nodemon --ext ts --exec \"npx tsc && node dist/index.js\"",
+    "dev:prod": "NODE_ENV=production nodemon --ext ts --exec \"npx tsc && node dist/index.js\"",
+    "test": "NODE_ENV=testing vitest",
+    "test:watch": "NODE_ENV=testing vitest --watch",
+    "test:run": "NODE_ENV=testing vitest run",
+    "encrypt": "npx tsx src/config/encrypt.ts",
+    "encrypt:prod": "npx tsx src/config/encrypt-prod.ts"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "mysql2": "^3.19.0",
+    "nodemon": "^3.1.14",
+    "sequelize": "^6.37.8"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.3.5",
+    "ts-node-dev": "^2.0.0",
+    "typescript": "^5.9.3"
+  }
+}

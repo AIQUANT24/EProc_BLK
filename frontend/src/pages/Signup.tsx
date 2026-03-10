@@ -1,129 +1,260 @@
 import { useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { useLanguage } from "@/contexts/LanguageContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { ShieldCheck, Mail, Lock, User, Building2, ArrowRight, Languages } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  ShieldCheck,
+  Mail,
+  Lock,
+  User,
+  Building2,
+  ArrowRight,
+} from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 const Signup = () => {
   const { isAuthenticated } = useAuth();
-  const { t, language, setLanguage } = useLanguage();
+  const navigate = useNavigate();
   const { toast } = useToast();
-  const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "", organization: "", role: "" });
+
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [form, setForm] = useState({
+    fullName: "",
+    email: "",
+    password: "",
+    confirm: "",
+    organization: "",
+    role: "",
+  });
 
   if (isAuthenticated) return <Navigate to="/dashboard" replace />;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    // 1. Validation
     if (form.password !== form.confirm) {
-      toast({ title: language === "hi" ? "पासवर्ड मेल नहीं खाते" : "Passwords don't match", variant: "destructive" });
+      toast({ title: "Passwords don't match", variant: "destructive" });
       return;
     }
     if (!form.role) {
-      toast({ title: language === "hi" ? "कृपया एक भूमिका चुनें" : "Please select a role", variant: "destructive" });
+      toast({ title: "Please select a role", variant: "destructive" });
       return;
     }
-    toast({
-      title: language === "hi" ? "पंजीकरण जमा किया गया" : "Registration submitted",
-      description: language === "hi" ? "आपका खाता अनुमोदन के लिए लंबित है। अभी डेमो लॉगिन का उपयोग करें।" : "Your account is pending approval. You'll receive an email once activated. For now, use the demo login.",
-    });
+
+    setIsSubmitting(true);
+
+    try {
+      // 2. API Integration
+      const response = await fetch(`${API_URL}/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName: form.fullName,
+          email: form.email,
+          password: form.password,
+          organization: form.organization,
+          role: form.role,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast({
+          title: "Registration successful!",
+          description: "Your account has been created. You can now sign in.",
+        });
+        navigate("/login");
+      } else {
+        toast({
+          title: "Registration failed",
+          description: data.message || "An error occurred during signup.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Connection error",
+        description: "Could not connect to the server. Please try again later.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const update = (key: string, value: string) => setForm(prev => ({ ...prev, [key]: value }));
+  const update = (key: string, value: string) =>
+    setForm((prev) => ({ ...prev, [key]: value }));
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background p-4">
       <div className="w-full max-w-lg space-y-6">
-        {/* Language Toggle */}
-        <div className="flex justify-end">
-          <Button variant="ghost" size="sm" onClick={() => setLanguage(language === "en" ? "hi" : "en")} className="gap-1">
-            <Languages className="h-4 w-4" />
-            {language === "en" ? "हिंदी" : "English"}
-          </Button>
-        </div>
-
-        <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} className="text-center">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center"
+        >
           <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl gradient-primary shadow-lg">
             <ShieldCheck className="h-9 w-9 text-primary-foreground" />
           </div>
-          <h1 className="font-display text-3xl font-bold text-foreground">{t("signupTitle")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("signupSubtitle")}</p>
+          <h1 className="font-display text-3xl font-bold text-foreground">
+            Create Account
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Join the National Compliance Infrastructure
+          </p>
         </motion.div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
           <Card className="shadow-xl border border-border">
             <CardContent className="p-8">
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="font-semibold text-foreground">{t("signupName")}</Label>
+                    <Label className="font-semibold text-foreground">
+                      Full Name
+                    </Label>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input placeholder={language === "hi" ? "आपका नाम" : "Your name"} value={form.name} onChange={e => update("name", e.target.value)} className="pl-10" required />
+                      <Input
+                        placeholder="John Doe"
+                        value={form.fullName}
+                        onChange={(e) => update("fullName", e.target.value)}
+                        className="pl-10"
+                        required
+                      />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label className="font-semibold text-foreground">{t("labelOrganization")}</Label>
+                    <Label className="font-semibold text-foreground">
+                      Organization
+                    </Label>
                     <div className="relative">
                       <Building2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input placeholder={language === "hi" ? "कंपनी / विभाग" : "Company / Dept"} value={form.organization} onChange={e => update("organization", e.target.value)} className="pl-10" required />
+                      <Input
+                        placeholder="Company / Dept"
+                        value={form.organization}
+                        onChange={(e) => update("organization", e.target.value)}
+                        className="pl-10"
+                        required
+                      />
                     </div>
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="font-semibold text-foreground">{t("signupEmail")}</Label>
+                  <Label className="font-semibold text-foreground">
+                    Email Address
+                  </Label>
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input type="email" placeholder="you@example.com" value={form.email} onChange={e => update("email", e.target.value)} className="pl-10" required />
+                    <Input
+                      type="email"
+                      placeholder="you@example.com"
+                      value={form.email}
+                      onChange={(e) => update("email", e.target.value)}
+                      className="pl-10"
+                      required
+                    />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <Label className="font-semibold text-foreground">{t("labelRole")}</Label>
-                  <Select value={form.role} onValueChange={v => update("role", v)}>
+                  <Label className="font-semibold text-foreground">
+                    Account Role
+                  </Label>
+                  <Select
+                    value={form.role}
+                    onValueChange={(v) => update("role", v)}
+                  >
                     <SelectTrigger>
-                      <SelectValue placeholder={language === "hi" ? "अपनी भूमिका चुनें" : "Select your role"} />
+                      <SelectValue placeholder="Select your role" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="supplier">{t("roleSupplier")} — {language === "hi" ? "BOM और उत्पाद जमा करें" : "Submit BOMs & products"}</SelectItem>
-                      <SelectItem value="procurement">{t("roleProcurement")} — {language === "hi" ? "अनुपालन सत्यापित करें" : "Verify compliance"}</SelectItem>
-                      <SelectItem value="auditor">{t("roleAuditor")} — {language === "hi" ? "केवल-पढ़ने योग्य ऑडिट एक्सेस" : "Read-only audit access"}</SelectItem>
+                      <SelectItem value="supplier">
+                        Supplier — Register products & BOMs
+                      </SelectItem>
+                      <SelectItem value="procurement">
+                        Procurement — Verify DVA compliance
+                      </SelectItem>
+                      <SelectItem value="auditor">
+                        Auditor — Read-only verification access
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="font-semibold text-foreground">{t("signupPassword")}</Label>
+                    <Label className="font-semibold text-foreground">
+                      Password
+                    </Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input type="password" placeholder="••••••••" value={form.password} onChange={e => update("password", e.target.value)} className="pl-10" required />
+                      <Input
+                        type="password"
+                        placeholder="••••••••"
+                        value={form.password}
+                        onChange={(e) => update("password", e.target.value)}
+                        className="pl-10"
+                        required
+                      />
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label className="font-semibold text-foreground">{t("signupConfirm")}</Label>
+                    <Label className="font-semibold text-foreground">
+                      Confirm Password
+                    </Label>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input type="password" placeholder="••••••••" value={form.confirm} onChange={e => update("confirm", e.target.value)} className="pl-10" required />
+                      <Input
+                        type="password"
+                        placeholder="••••••••"
+                        value={form.confirm}
+                        onChange={(e) => update("confirm", e.target.value)}
+                        className="pl-10"
+                        required
+                      />
                     </div>
                   </div>
                 </div>
 
-                <Button type="submit" className="w-full gradient-primary text-primary-foreground gap-2 h-12 text-base font-semibold">
-                  {t("signupButton")} <ArrowRight className="h-4 w-4" />
+                <Button
+                  type="submit"
+                  disabled={isSubmitting}
+                  className="w-full gradient-primary text-primary-foreground gap-2 h-12 text-base font-semibold transition-all hover:scale-[1.01]"
+                >
+                  {isSubmitting ? "Creating Account..." : "Register Now"}
+                  <ArrowRight className="h-4 w-4" />
                 </Button>
               </form>
 
-              <p className="text-center text-sm text-muted-foreground mt-4">
-                {t("signupHaveAccount")}{" "}
-                <Link to="/login" className="text-primary font-semibold hover:underline">{t("signupLoginLink")}</Link>
+              <p className="text-center text-sm text-muted-foreground mt-6">
+                Already have an account?{" "}
+                <Link
+                  to="/login"
+                  className="text-primary font-semibold hover:underline"
+                >
+                  Sign In
+                </Link>
               </p>
             </CardContent>
           </Card>

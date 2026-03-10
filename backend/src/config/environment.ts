@@ -18,6 +18,11 @@ export const config = {
     HOST: process.env.DATABASE_HOST || "localhost",
     PORT: process.env.DATABASE_PORT || 3306,
   },
+
+  COOKIE_NAME: process.env.COOKIE_NAME || "auth_token",
+  JWT_SECRET: process.env.JWT_SECRET || "secret",
+
+  DEFAULT_PASSWORD: process.env.DEFAULT_PASSWORD || "password",
 } as const;
 
 export default config;

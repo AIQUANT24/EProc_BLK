@@ -1,63 +1,172 @@
-import React, { createContext, useContext, useState, useCallback } from "react";
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+} from "react";
 
-export type UserRole = "superadmin" | "admin" | "procurement" | "supplier" | "auditor";
+export type UserRole =
+  | "superadmin"
+  | "admin"
+  | "procurement"
+  | "supplier"
+  | "auditor";
 
 export interface User {
   id: string;
-  name: string;
+  fullName: string;
   email: string;
   role: UserRole;
   organization?: string;
 }
 
+export interface ForgotPasswordResponse {
+  success: boolean;
+  resetToken: string;
+}
+
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<boolean>;
-  loginAsDemo: (role: UserRole) => void;
-  logout: () => void;
+  logout: () => Promise<void>;
+  // Added these two methods to the interface
+  forgotPassword: (email: string) => Promise<ForgotPasswordResponse>;
+  resetPassword: (password: string, token: string) => Promise<boolean>;
   isAuthenticated: boolean;
+  isLoading: boolean;
 }
 
+const API_URL = import.meta.env.VITE_API_URL;
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
-const DEMO_USERS: Record<UserRole, User> = {
-  superadmin: { id: "sa-001", name: "Dr. Meera Iyer", email: "superadmin@nmicov.gov.in", role: "superadmin", organization: "DPIIT — Ministry of Commerce" },
-  admin: { id: "admin-001", name: "Rajesh Kumar", email: "admin@nmicov.gov.in", role: "admin", organization: "DPIIT" },
-  procurement: { id: "proc-001", name: "Anita Sharma", email: "procurement@nmicov.gov.in", role: "procurement", organization: "GeM" },
-  supplier: { id: "sup-001", name: "Vikram Industries", email: "supplier@vikram.co.in", role: "supplier", organization: "Vikram Industries Pvt Ltd" },
-  auditor: { id: "aud-001", name: "CAG Audit Division", email: "auditor@cag.gov.in", role: "auditor", organization: "Comptroller & Auditor General" },
-};
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
+  children,
+}) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    const saved = localStorage.getItem("nmicov_user");
-    return saved ? JSON.parse(saved) : null;
-  });
+  /**
+   * Check for existing session on mount
+   */
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const res = await fetch(`${API_URL}/profile`, {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setUser(data.user);
+        }
+      } catch (err) {
+        console.error("Session check failed:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    checkSession();
+  }, []);
 
-  const login = useCallback(async (email: string, _password: string) => {
-    const found = Object.values(DEMO_USERS).find(u => u.email === email);
-    if (found) {
-      setUser(found);
-      localStorage.setItem("nmicov_user", JSON.stringify(found));
-      return true;
+  /**
+   * Standard Login
+   */
+  const login = useCallback(async (email: string, password: string) => {
+    try {
+      const response = await fetch(`${API_URL}/signin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+        credentials: "include",
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setUser(data.user);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error("Login request failed:", error);
+      return false;
     }
-    return false;
   }, []);
 
-  const loginAsDemo = useCallback((role: UserRole) => {
-    const u = DEMO_USERS[role];
-    setUser(u);
-    localStorage.setItem("nmicov_user", JSON.stringify(u));
+  /**
+   * Request Password Reset Link
+   */
+  const forgotPassword = useCallback(
+    async (email: string): Promise<ForgotPasswordResponse> => {
+      try {
+        const response = await fetch(`${API_URL}/forgot-password`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+          credentials: "include",
+        });
+
+        const data = await response.json();
+
+        return {
+          success: response.ok,
+          resetToken: data.resetToken as string,
+        };
+      } catch (error) {
+        console.error("Forgot password request failed:", error);
+        return { success: false, resetToken: "" };
+      }
+    },
+    [],
+  );
+
+  /**
+   * Reset Password with Token
+   */
+  const resetPassword = useCallback(async (password: string, token: string) => {
+    try {
+      const response = await fetch(`${API_URL}/reset-password/${token}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+        credentials: "include",
+      });
+
+      return response.ok;
+    } catch (error) {
+      console.error("Reset password request failed:", error);
+      return false;
+    }
   }, []);
 
-  const logout = useCallback(() => {
-    setUser(null);
-    localStorage.removeItem("nmicov_user");
+  /**
+   * Logout
+   */
+  const logout = useCallback(async () => {
+    try {
+      await fetch(`${API_URL}/logout`, {
+        method: "POST",
+        credentials: "include",
+      });
+    } catch (err) {
+      console.error("Logout request failed:", err);
+    } finally {
+      setUser(null);
+    }
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loginAsDemo, isAuthenticated: !!user }}>
-      {children}
+    <AuthContext.Provider
+      value={{
+        user,
+        login,
+        logout,
+        forgotPassword, // Exposed to components
+        resetPassword, // Exposed to components
+        isAuthenticated: !!user,
+        isLoading,
+      }}
+    >
+      {!isLoading && children}
     </AuthContext.Provider>
   );
 };

@@ -12,7 +12,7 @@ import BlockchainLedgerModelClass, {
 import VerificationLogModelClass, {
   initVerificationLogModel,
 } from "./verificationLog.model.js";
-import UserRoleModelClass, { initUserRoleModel } from "./userRole.model.js";
+import UserModelClass, { initUserModel } from "./user.model.js";
 import { sequelize } from "../config/db.js";
 
 // Export actual Sequelize model types (NOT nullable)
@@ -27,7 +27,7 @@ export let BlockchainLedger =
   BlockchainLedgerModelClass as typeof BlockchainLedgerModelClass;
 export let VerificationLog =
   VerificationLogModelClass as typeof VerificationLogModelClass;
-export let UserRole = UserRoleModelClass as typeof UserRoleModelClass;
+export let User = UserModelClass as typeof UserModelClass;
 
 let initialized = false;
 
@@ -42,7 +42,7 @@ export function initModels() {
       RiskAlert,
       BlockchainLedger,
       VerificationLog,
-      UserRole,
+      User,
     };
 
   // Initialize models using shared sequelize instance
@@ -54,7 +54,7 @@ export function initModels() {
   RiskAlert = initRiskAlertModel(sequelize);
   BlockchainLedger = initBlockchainLedgerModel(sequelize);
   VerificationLog = initVerificationLogModel(sequelize);
-  UserRole = initUserRoleModel(sequelize);
+  User = initUserModel(sequelize);
 
   const models = {
     Supplier,
@@ -65,7 +65,7 @@ export function initModels() {
     RiskAlert,
     BlockchainLedger,
     VerificationLog,
-    UserRole,
+    User,
   };
 
   // Setup associations if needed
@@ -92,5 +92,5 @@ export {
   RiskAlertModelClass as RiskAlertModel,
   BlockchainLedgerModelClass as BlockchainLedgerModel,
   VerificationLogModelClass as VerificationLogModel,
-  UserRoleModelClass as UserRoleModel,
+  UserModelClass as UserModel,
 };

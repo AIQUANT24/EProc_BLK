@@ -4,6 +4,7 @@ import cors from "cors";
 import cookieParser from "cookie-parser";
 import { sequelize, initSequelize } from "./config/db.js";
 import { initModels } from "./models/index.js";
+import authRoutes from "./routes/auth.routes.js";
 
 export async function bootstrap(): Promise<void> {
   try {
@@ -28,15 +29,24 @@ export async function bootstrap(): Promise<void> {
   const app = express();
   app.use(express.json());
 
+  // backend/src/app.ts
   app.use(
     cors({
-      origin: "*",
-      credentials: true,
+      origin: ["http://localhost:3000"],
+      credentials: true, // MUST be true for the browser to accept the cookie
+      methods: ["GET", "POST", "PUT", "DELETE"],
+      allowedHeaders: ["Content-Type", "Authorization"],
     }),
   );
 
   app.use(cookieParser());
 
+  app.get("/", (_req: Request, res: Response) =>
+    res.json({
+      status: "OK",
+      timestamp: new Date().toISOString(),
+    }),
+  );
   app.get("/api", (_req: Request, res: Response) =>
     res.json({
       message: "Backend API",
@@ -46,12 +56,8 @@ export async function bootstrap(): Promise<void> {
     }),
   );
 
-  app.get("/api/health", (_req: Request, res: Response) =>
-    res.json({
-      status: "OK",
-      timestamp: new Date().toISOString(),
-    }),
-  );
+  // other routes
+  app.use("/api/auth", authRoutes);
 
   app.listen(config.PORT, () =>
     console.log(

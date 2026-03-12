@@ -30,31 +30,43 @@ const SupplierDashboard = () => {
   const [dashboardData, setDashboardData] = useState({
     supplierProfile: null as any,
     products: [] as any[],
-    compliance: [] as any[],
   });
 
   const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${API_URL}/suppliers/profile`, {
-        withCredentials: true,
-      });
 
-      if (response.data?.success) {
-        setDashboardData((prev) => ({
-          ...prev,
-          supplierProfile: response.data.supplier,
-        }));
-      }
-    } catch (error: any) {
-      if (error.response?.status === 404) {
-        setDashboardData((prev) => ({ ...prev, supplierProfile: null }));
+      // Fetch both profile and products concurrently
+      const [profileRes, productsRes] = await Promise.all([
+        axios
+          .get(`${API_URL}/suppliers/profile`, { withCredentials: true })
+          .catch((e) => e.response),
+        axios
+          .get(`${API_URL}/products`, { withCredentials: true })
+          .catch((e) => e.response),
+      ]);
+
+      let profile = null;
+      let productsList = [];
+
+      // Handle Profile Response
+      if (profileRes?.data?.success) {
+        profile = profileRes.data.supplier;
+      } else if (profileRes?.status === 404) {
         toast.info("Welcome! Please complete your organizational profile.");
-      } else {
-        const message =
-          error.response?.data?.message || "Failed to load dashboard data";
-        toast.error(message);
       }
+
+      // Handle Products Response
+      if (productsRes?.data?.success) {
+        productsList = productsRes.data.products;
+      }
+
+      setDashboardData({
+        supplierProfile: profile,
+        products: productsList,
+      });
+    } catch (error: any) {
+      toast.error("Failed to load dashboard data. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -64,7 +76,6 @@ const SupplierDashboard = () => {
     if (user) fetchDashboardData();
   }, [fetchDashboardData, user]);
 
-  // NEW: Helper to check if profile is complete
   const isProfileComplete = !!dashboardData.supplierProfile;
 
   const handleNewProductClick = () => {
@@ -78,18 +89,26 @@ const SupplierDashboard = () => {
     navigate("/products/new");
   };
 
-  // Calculations
+  // --- KPI Calculations ---
   const myProducts = dashboardData.products || [];
-  const myCompliance = dashboardData.compliance || [];
+
+  const bomsSubmitted = myProducts.filter((p) => p.status !== "draft").length;
+
+  const productsWithDva = myProducts.filter(
+    (p) => p.dvaScore !== null && p.dvaScore !== undefined,
+  );
   const avgDva =
-    myCompliance.length > 0
+    productsWithDva.length > 0
       ? (
-          myCompliance.reduce(
-            (sum, c) => sum + (parseFloat(c.dva_score) || 0),
-            0,
-          ) / myCompliance.length
+          productsWithDva.reduce((sum, p) => sum + parseFloat(p.dvaScore), 0) /
+          productsWithDva.length
         ).toFixed(1)
       : "0.0";
+
+  // Assuming 'verified' or 'active' status signifies a compliant, approved unit
+  const compliantUnits = myProducts.filter(
+    (p) => p.status === "verified" || p.status === "active",
+  ).length;
 
   if (loading) {
     return (
@@ -114,7 +133,6 @@ const SupplierDashboard = () => {
         actions={
           <Button
             onClick={handleNewProductClick}
-            // Logic: Disable visually if profile is missing
             className={`${
               isProfileComplete
                 ? "gradient-primary"
@@ -135,12 +153,12 @@ const SupplierDashboard = () => {
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           title="My Products"
-          value={dashboardData.supplierProfile?.products_count || 0}
+          value={myProducts.length}
           icon={<Package className="h-6 w-6 text-primary" />}
         />
         <StatCard
           title="BOMs Submitted"
-          value={myProducts.filter((p) => p.status !== "draft").length}
+          value={bomsSubmitted}
           icon={<ClipboardList className="h-6 w-6 text-blue-500" />}
         />
         <StatCard
@@ -150,7 +168,7 @@ const SupplierDashboard = () => {
         />
         <StatCard
           title="Compliant Units"
-          value={myCompliance.filter((c) => c.status === "compliant").length}
+          value={compliantUnits}
           icon={<CheckCircle className="h-6 w-6 text-green-500" />}
         />
       </div>
@@ -176,6 +194,22 @@ const SupplierDashboard = () => {
                     </p>
                     <p className="font-semibold uppercase">
                       {dashboardData.supplierProfile.gst}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs uppercase tracking-wider">
+                      PAN Number
+                    </p>
+                    <p className="font-semibold uppercase">
+                      {dashboardData.supplierProfile.pan}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs uppercase tracking-wider">
+                      Udyam Number
+                    </p>
+                    <p className="font-semibold uppercase">
+                      {dashboardData.supplierProfile.udyam}
                     </p>
                   </div>
                   <div>
@@ -233,15 +267,62 @@ const SupplierDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Compliance Status Tracker */}
+        {/* Compliance Status Tracker (Designed to match your screenshot) */}
         <Card className="border-border/50 shadow-sm">
           <CardHeader>
             <CardTitle className="font-display text-xl flex items-center gap-2">
               <ShieldCheck className="h-5 w-5 text-muted-foreground" />
-              Compliance Snapshot
+              Compliance Status
             </CardTitle>
           </CardHeader>
-          <CardContent>{/* ... existing compliance logic ... */}</CardContent>
+          <CardContent>
+            <div className="space-y-3">
+              {myProducts.length > 0 ? (
+                myProducts.slice(0, 5).map((p) => {
+                  // Determine visual styling based on status
+                  let badgeVariant: any = "outline";
+                  let badgeLabel = p.status;
+
+                  if (p.status === "verified" || p.status === "active") {
+                    badgeVariant = "default"; // Primary purple
+                    badgeLabel = "compliant";
+                  } else if (p.status === "under_review") {
+                    badgeVariant = "secondary"; // Gray/neutral
+                    badgeLabel = "under-review";
+                  }
+
+                  return (
+                    <div
+                      key={p.id}
+                      className="flex items-center justify-between rounded-lg border border-border/50 p-4 hover:bg-accent/50 transition-colors"
+                    >
+                      <div>
+                        <p className="font-semibold text-sm">{p.name}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          DVA: {p.dvaScore !== null ? `${p.dvaScore}%` : "N/A"}
+                          {p.classification ? ` • ${p.classification}` : ""}
+                        </p>
+                      </div>
+                      <Badge
+                        variant={badgeVariant}
+                        className="px-3 py-0.5 font-medium lowercase"
+                      >
+                        {badgeLabel}
+                      </Badge>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center border-2 border-dashed border-border rounded-lg">
+                  <ShieldCheck className="h-10 w-10 text-muted-foreground/20 mb-2" />
+                  <p className="text-muted-foreground text-sm">
+                    No products found. Register a product to see compliance
+                    status.
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
         </Card>
       </div>
     </div>

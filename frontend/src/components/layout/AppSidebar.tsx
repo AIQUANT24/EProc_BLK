@@ -44,12 +44,6 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["superadmin", "admin", "procurement", "supplier", "auditor"],
   },
   {
-    label: "BOM Management",
-    path: "/bom",
-    icon: <ClipboardList className="h-5 w-5" />,
-    roles: ["superadmin", "admin", "supplier"],
-  },
-  {
     label: "DVA Engine",
     path: "/dva",
     icon: <Calculator className="h-5 w-5" />,

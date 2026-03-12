@@ -56,7 +56,7 @@ const App = () => (
                   />
                   <Route path="/products" element={<Products />} />
                   <Route path="/products/new" element={<NewProduct />} />
-                  <Route path="/bom" element={<BOMManagement />} />
+                  <Route path="/bom/:id" element={<BOMManagement />} />
                   <Route path="/dva" element={<DVAResults />} />
                   <Route path="/compliance" element={<Compliance />} />
                   <Route path="/verification" element={<Verification />} />

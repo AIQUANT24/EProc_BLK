@@ -8,12 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, ListTree } from "lucide-react";
 import { toast } from "sonner";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
-// Define the interface based on your Sequelize Product model
 interface Product {
   id: string;
   name: string;
@@ -34,7 +33,37 @@ const Products = () => {
 
   const isSupplier = user?.role === "supplier";
 
-  // Fetch products from the backend
+  const [dashboardData, setDashboardData] = useState({
+    supplierProfile: null as any,
+    products: [] as any[],
+    compliance: [] as any[],
+  });
+
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_URL}/suppliers/profile`, {
+        withCredentials: true,
+      });
+
+      if (response.data?.success) {
+        setDashboardData((prev) => ({
+          ...prev,
+          supplierProfile: response.data.supplier,
+        }));
+      }
+    } catch (error: any) {
+      if (error.response?.status === 404) {
+        setDashboardData((prev) => ({ ...prev, supplierProfile: null }));
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (user) fetchDashboardData();
+  }, [fetchDashboardData, user]);
+
+  const isProfileComplete = !!dashboardData.supplierProfile;
+
   const fetchProducts = useCallback(async () => {
     try {
       setLoading(true);
@@ -56,13 +85,11 @@ const Products = () => {
     fetchProducts();
   }, [fetchProducts]);
 
-  // Define table columns (English only)
   const columns: Column<Product>[] = [
     {
       key: "id",
       label: "ID",
       sortable: true,
-      // Slicing the UUID just for a cleaner display on the frontend table
       render: (r) => (
         <span className="font-mono text-xs uppercase">
           {r.id.split("-")[0]}
@@ -147,6 +174,21 @@ const Products = () => {
         );
       },
     },
+    // NEW: Actions Column linking to the BOM Page
+    {
+      key: "actions" as any,
+      label: "Actions",
+      render: (r) => (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => navigate(`/bom/${r.id}`)}
+          className="gap-2"
+        >
+          <ListTree className="h-4 w-4" /> Manage BOM
+        </Button>
+      ),
+    },
   ];
 
   if (loading) {
@@ -168,7 +210,7 @@ const Products = () => {
         title="Registered Products"
         description={`${products.length} products total · ${products.filter((p) => p.status === "verified").length} verified`}
         actions={
-          isSupplier || user?.role === "admin" ? (
+          (isProfileComplete && isSupplier) || user?.role === "admin" ? (
             <Button
               onClick={() => navigate("/products/new")}
               className="gradient-primary text-primary-foreground gap-2"

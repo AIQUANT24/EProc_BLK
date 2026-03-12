@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
+import { useParams, useNavigate } from "react-router-dom"; // Added for routing
 import axios from "axios";
 import { useAuth } from "@/contexts/AuthContext";
 import PageHeader from "@/components/shared/PageHeader";
@@ -39,6 +40,7 @@ import {
   Upload,
   Download,
   Loader2,
+  ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -56,7 +58,6 @@ interface Product {
   status: string;
 }
 
-// FIX: Added productId to satisfy the dva-engine functions
 interface BOMComponent {
   id: string;
   productId: string;
@@ -68,10 +69,13 @@ interface BOMComponent {
 
 const BOMManagement = () => {
   const { user } = useAuth();
+  // Extract the Product ID from the URL (e.g., /bom/12345-abc)
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+
   const [loading, setLoading] = useState(true);
-  const [products, setProducts] = useState<Product[]>([]);
+  const [activeProduct, setActiveProduct] = useState<Product | null>(null);
   const [components, setComponents] = useState<BOMComponent[]>([]);
-  const [selectedProduct, setSelectedProduct] = useState<string>("");
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
@@ -89,49 +93,39 @@ const BOMManagement = () => {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const fetchProducts = useCallback(async () => {
-    try {
-      const res = await axios.get(`${API_URL}/products`, {
-        withCredentials: true,
-      });
-      if (res.data?.success) {
-        setProducts(res.data.products);
-        if (res.data.products.length > 0) {
-          setSelectedProduct(res.data.products[0].id);
-        }
-      }
-    } catch (error) {
-      toast.error("Failed to load products");
-    }
-  }, []);
-
-  const fetchComponents = useCallback(async (productId: string) => {
-    if (!productId) return;
+  // Fetch the Specific Product and its Components
+  const fetchData = useCallback(async () => {
+    if (!id) return;
     try {
       setLoading(true);
-      const res = await axios.get(
-        `${API_URL}/components?productId=${productId}`,
-        { withCredentials: true },
-      );
-      if (res.data?.success) {
-        setComponents(res.data.components);
+
+      // We fetch all products and find the specific one
+      // (If you have a GET /api/products/:id route, use that instead for better performance)
+      const prodRes = await axios.get(`${API_URL}/products`, {
+        withCredentials: true,
+      });
+      if (prodRes.data?.success) {
+        const found = prodRes.data.products.find((p: Product) => p.id === id);
+        if (found) setActiveProduct(found);
+      }
+
+      // Fetch components for this specific product ID
+      const compRes = await axios.get(`${API_URL}/components?productId=${id}`, {
+        withCredentials: true,
+      });
+      if (compRes.data?.success) {
+        setComponents(compRes.data.components);
       }
     } catch (error) {
-      toast.error("Failed to load BOM components");
+      toast.error("Failed to load BOM data");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [id]);
 
   useEffect(() => {
-    fetchProducts();
-  }, [fetchProducts]);
-
-  useEffect(() => {
-    fetchComponents(selectedProduct);
-    setDvaResult(null);
-    setWhatIfScenarios([]);
-  }, [selectedProduct, fetchComponents]);
+    fetchData();
+  }, [fetchData]);
 
   const currentDva = calculateDVA(components);
   const whatIfResult =
@@ -140,20 +134,19 @@ const BOMManagement = () => {
       : null;
   const displayDva = whatIfResult || dvaResult || currentDva;
 
-  const activeProduct = products.find((p) => p.id === selectedProduct);
   const isLocked =
     activeProduct?.status === "submitted" ||
     activeProduct?.status === "verified" ||
     activeProduct?.status === "under_review";
 
   const handleAdd = async () => {
-    if (!form.name || !form.origin || !form.cost) return;
+    if (!form.name || !form.origin || !form.cost || !id) return;
 
     try {
       await axios.post(
         `${API_URL}/components`,
         {
-          productId: selectedProduct,
+          productId: id,
           name: form.name,
           origin: form.origin,
           cost: Number(form.cost),
@@ -165,7 +158,7 @@ const BOMManagement = () => {
       toast.success("Component added to BOM");
       setForm({ name: "", origin: "domestic", cost: "", supplierName: "" });
       setOpen(false);
-      fetchComponents(selectedProduct);
+      fetchData(); // Refresh table
     } catch (error: any) {
       toast.error(error.response?.data?.message || "Failed to add component");
     }
@@ -174,12 +167,12 @@ const BOMManagement = () => {
   const handleSubmitBOM = async () => {
     try {
       await axios.put(
-        `${API_URL}/products/${selectedProduct}/submit`,
+        `${API_URL}/products/${id}/submit`,
         {},
         { withCredentials: true },
       );
       toast.success("BOM submitted and locked for review");
-      fetchProducts();
+      fetchData(); // Refresh to get updated lock status
     } catch (error) {
       toast.error("Failed to submit BOM");
     }
@@ -201,7 +194,7 @@ const BOMManagement = () => {
 
   const handleCSVImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !id) return;
 
     const reader = new FileReader();
     reader.onload = async (ev) => {
@@ -232,14 +225,14 @@ const BOMManagement = () => {
         await axios.post(
           `${API_URL}/components/bulk`,
           {
-            productId: selectedProduct,
+            productId: id,
             components: rows,
           },
           { withCredentials: true },
         );
 
         toast.success(`${rows.length} components imported from CSV`);
-        fetchComponents(selectedProduct);
+        fetchData();
       } catch (error) {
         toast.error("Failed to import CSV data");
       }
@@ -258,7 +251,7 @@ const BOMManagement = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `bom-${selectedProduct}.csv`;
+    a.download = `bom-${id}.csv`;
     a.click();
     URL.revokeObjectURL(url);
     toast.success("BOM exported as CSV");
@@ -290,39 +283,34 @@ const BOMManagement = () => {
     });
   };
 
-  if (products.length === 0 && !loading) {
+  if (!activeProduct && !loading) {
     return (
       <div className="flex flex-col items-center justify-center h-[60vh] animate-fade-in">
         <Package className="h-16 w-16 text-muted-foreground/30 mb-4" />
-        <h2 className="text-xl font-display mb-2">No Products Found</h2>
-        <p className="text-muted-foreground mb-4">
-          You need to register a product before managing a Bill of Materials.
-        </p>
+        <h2 className="text-xl font-display mb-2">Product Not Found</h2>
+        <Button variant="outline" onClick={() => navigate("/products")}>
+          Back to Products
+        </Button>
       </div>
     );
   }
 
   return (
     <div className="animate-fade-in">
+      <Button
+        variant="ghost"
+        onClick={() => navigate("/products")}
+        className="mb-4 gap-2"
+      >
+        <ArrowLeft className="h-4 w-4" /> Back to Products
+      </Button>
+
       <PageHeader
-        title="Bill of Materials (BOM) Management"
+        title={`BOM: ${activeProduct?.name || "Loading..."}`}
         description="Manage components, calculate Domestic Value Addition, and run what-if scenarios."
       />
 
       <div className="mb-6 flex items-center gap-3 flex-wrap">
-        <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-          <SelectTrigger className="w-72">
-            <SelectValue placeholder="Select a product..." />
-          </SelectTrigger>
-          <SelectContent>
-            {products.map((p) => (
-              <SelectItem key={p.id} value={p.id}>
-                {p.name} ({p.id.split("-")[0]})
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
         {!isLocked && (
           <>
             <Dialog open={open} onOpenChange={setOpen}>

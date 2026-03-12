@@ -10,12 +10,23 @@ interface ProductAttributes {
   dvaScore: number | null;
   classification: string | null; // "Class I", "Class II", etc.
   status: "draft" | "active" | "archived" | "under_review" | "verified";
+  confidence: number | null;
+  risk: number | null;
+  blockchainTxHash: string | null;
 }
 
 // 2. Optional attributes during .create()
 interface ProductCreationAttributes extends Optional<
   ProductAttributes,
-  "id" | "category" | "estimatedCost" | "dvaScore" | "classification" | "status"
+  | "id"
+  | "category"
+  | "estimatedCost"
+  | "dvaScore"
+  | "classification"
+  | "status"
+  | "confidence"
+  | "risk"
+  | "blockchainTxHash"
 > {}
 
 export default class Product
@@ -30,6 +41,9 @@ export default class Product
   public dvaScore!: number | null;
   public classification!: string | null;
   public status!: "draft" | "active" | "archived" | "under_review" | "verified";
+  public confidence!: number | null;
+  public risk!: number | null;
+  public blockchainTxHash!: string | null;
 
   // Associations
   static associate(models: any) {
@@ -104,6 +118,26 @@ export function initProductModel(sequelize: Sequelize) {
         ),
         defaultValue: "draft",
         allowNull: false,
+      },
+      confidence: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: true,
+        get() {
+          const value = this.getDataValue("confidence");
+          return value ? parseFloat(value.toString()) : null;
+        },
+      },
+      risk: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: true,
+        get() {
+          const value = this.getDataValue("risk");
+          return value ? parseFloat(value.toString()) : null;
+        },
+      },
+      blockchainTxHash: {
+        type: DataTypes.STRING,
+        allowNull: true,
       },
     },
     {

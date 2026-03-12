@@ -5,6 +5,8 @@ import cookieParser from "cookie-parser";
 import { sequelize, initSequelize } from "./config/db.js";
 import { initModels } from "./models/index.js";
 import authRoutes from "./routes/auth.routes.js";
+import "./enrollAdmin.js"; // Ensure admin is enrolled at server startup
+import complianceRoutes from './routes/compliance.routes.js';
 
 export async function bootstrap(): Promise<void> {
   try {
@@ -58,6 +60,7 @@ export async function bootstrap(): Promise<void> {
 
   // other routes
   app.use("/api/auth", authRoutes);
+app.use('/api/compliance', complianceRoutes);
 
   app.listen(config.PORT, () =>
     console.log(

@@ -26,10 +26,15 @@
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
+    "fabric-network": "^2.2.20",
+    "fs": "^0.0.1-security",
     "jsonwebtoken": "^9.0.3",
+    "meta": "^2.2.25",
     "mysql2": "^3.19.0",
     "nodemon": "^3.1.14",
-    "sequelize": "^6.37.8"
+    "path": "^0.12.7",
+    "sequelize": "^6.37.8",
+    "url": "^0.11.4"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",

@@ -69,7 +69,6 @@ cd network
 
 ```bash
 ./network.sh down
-
 ```
 
 - **Restart the network and channel:**

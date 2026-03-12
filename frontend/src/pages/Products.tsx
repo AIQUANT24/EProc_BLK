@@ -1,104 +1,193 @@
-import { useState } from "react";
-import { useMockData } from "@/contexts/MockDataContext";
+import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
 import { useAuth } from "@/contexts/AuthContext";
-import { useLanguage } from "@/contexts/LanguageContext";
 import PageHeader from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { Plus } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import type { Product } from "@/contexts/MockDataContext";
+
+const API_URL = import.meta.env.VITE_API_URL;
+
+// Define the interface based on your Sequelize Product model
+interface Product {
+  id: string;
+  name: string;
+  category: string;
+  estimatedCost: number;
+  dvaScore: number | null;
+  classification: string | null;
+  status: "draft" | "active" | "archived" | "under_review" | "verified";
+  createdAt: string;
+}
 
 const Products = () => {
-  const { products, addProduct, suppliers } = useMockData();
   const { user } = useAuth();
-  const { t, language } = useLanguage();
-  const [open, setOpen] = useState(false);
-  const [form, setForm] = useState({ supplierId: "", name: "", category: "", hsnCode: "", estimatedCost: "" });
+  const navigate = useNavigate();
+
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const isSupplier = user?.role === "supplier";
-  const displayProducts = isSupplier ? products.filter(p => p.supplierId === "SUP-001") : products;
 
+  // Fetch products from the backend
+  const fetchProducts = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`${API_URL}/products`, {
+        withCredentials: true,
+      });
+
+      if (response.data?.success) {
+        setProducts(response.data.products || []);
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Failed to load products");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  // Define table columns (English only)
   const columns: Column<Product>[] = [
-    { key: "id", label: "ID", sortable: true, render: r => <span className="font-mono text-xs">{r.id}</span> },
-    { key: "name", label: language === "hi" ? "उत्पाद का नाम" : "Product Name", sortable: true, render: r => <span className="font-medium">{r.name}</span> },
-    { key: "supplierName", label: language === "hi" ? "आपूर्तिकर्ता" : "Supplier", sortable: true },
-    { key: "category", label: t("labelCategory"), sortable: true, filterOptions: [...new Set(products.map(p => p.category))] },
-    { key: "hsnCode", label: t("productHSN"), render: r => <span className="font-mono text-xs">{r.hsnCode}</span> },
-    { key: "estimatedCost", label: language === "hi" ? "लागत (₹)" : "Cost (₹)", sortable: true, render: r => <span>₹{r.estimatedCost.toLocaleString("en-IN")}</span> },
-    { key: "dvaScore", label: t("productDVA"), sortable: true, render: r => r.dvaScore != null ? (
-      <div className="flex items-center gap-2">
-        <span className="font-bold text-sm">{r.dvaScore}%</span>
-        <Progress value={r.dvaScore} className="h-1.5 w-16" />
-      </div>
-    ) : <span className="text-muted-foreground text-xs">—</span> },
-    { key: "classification", label: t("productClass"), filterOptions: ["Class I", "Class II", "Non-Local"], render: r => r.classification ? (
-      <Badge variant={r.classification === "Class I" ? "default" : r.classification === "Class II" ? "secondary" : "destructive"}>{r.classification}</Badge>
-    ) : <span className="text-muted-foreground text-xs">—</span> },
-    { key: "status", label: t("labelStatus"), filterOptions: ["draft", "submitted", "verified"], render: r => (
-      <Badge variant={r.status === "verified" ? "default" : r.status === "submitted" ? "secondary" : "outline"}>{r.status}</Badge>
-    )},
+    {
+      key: "id",
+      label: "ID",
+      sortable: true,
+      // Slicing the UUID just for a cleaner display on the frontend table
+      render: (r) => (
+        <span className="font-mono text-xs uppercase">
+          {r.id.split("-")[0]}
+        </span>
+      ),
+    },
+    {
+      key: "name",
+      label: "Product Name",
+      sortable: true,
+      render: (r) => <span className="font-medium">{r.name}</span>,
+    },
+    {
+      key: "category",
+      label: "Category",
+      sortable: true,
+      filterOptions: [...new Set(products.map((p) => p.category))],
+    },
+    {
+      key: "estimatedCost",
+      label: "Estimated Cost (₹)",
+      sortable: true,
+      render: (r) => (
+        <span>₹{r.estimatedCost?.toLocaleString("en-IN") || "0"}</span>
+      ),
+    },
+    {
+      key: "dvaScore",
+      label: "DVA Score",
+      sortable: true,
+      render: (r) =>
+        r.dvaScore != null ? (
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-sm">{r.dvaScore}%</span>
+            <Progress value={r.dvaScore} className="h-1.5 w-16" />
+          </div>
+        ) : (
+          <span className="text-muted-foreground text-xs">—</span>
+        ),
+    },
+    {
+      key: "classification",
+      label: "Classification",
+      filterOptions: ["Class I", "Class II", "Non-Local"],
+      render: (r) =>
+        r.classification ? (
+          <Badge
+            variant={
+              r.classification === "Class I"
+                ? "default"
+                : r.classification === "Class II"
+                  ? "secondary"
+                  : "destructive"
+            }
+          >
+            {r.classification}
+          </Badge>
+        ) : (
+          <span className="text-muted-foreground text-xs">—</span>
+        ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      filterOptions: [
+        "draft",
+        "under_review",
+        "verified",
+        "active",
+        "archived",
+      ],
+      render: (r) => {
+        let variant = "outline";
+        if (r.status === "verified" || r.status === "active")
+          variant = "default";
+        else if (r.status === "under_review") variant = "secondary";
+
+        return (
+          <Badge variant={variant as any} className="capitalize">
+            {r.status.replace("_", " ")}
+          </Badge>
+        );
+      },
+    },
   ];
 
-  const handleSubmit = () => {
-    if (!form.name || !form.category) return;
-    addProduct({ supplierId: form.supplierId || "SUP-001", name: form.name, category: form.category, hsnCode: form.hsnCode, estimatedCost: Number(form.estimatedCost) || 0 });
-    toast.success(language === "hi" ? "उत्पाद सफलतापूर्वक पंजीकृत" : "Product registered successfully");
-    setForm({ supplierId: "", name: "", category: "", hsnCode: "", estimatedCost: "" });
-    setOpen(false);
-  };
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <p className="text-muted-foreground animate-pulse">
+            Loading products data...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in space-y-6">
       <PageHeader
-        title={t("productsTitle")}
-        description={`${displayProducts.length} ${language === "hi" ? "उत्पाद पंजीकृत" : "products registered"} · ${displayProducts.filter(p => p.status === "verified").length} ${language === "hi" ? "सत्यापित" : "verified"}`}
+        title="Registered Products"
+        description={`${products.length} products total · ${products.filter((p) => p.status === "verified").length} verified`}
         actions={
-          (isSupplier || user?.role === "admin") ? (
-            <Dialog open={open} onOpenChange={setOpen}>
-              <DialogTrigger asChild>
-                <Button className="gradient-primary text-primary-foreground gap-2"><Plus className="h-4 w-4" /> {language === "hi" ? "उत्पाद पंजीकृत करें" : "Register Product"}</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader><DialogTitle className="font-display">{language === "hi" ? "नया उत्पाद पंजीकृत करें" : "Register New Product"}</DialogTitle></DialogHeader>
-                <div className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label>{language === "hi" ? "उत्पाद का नाम" : "Product Name"}</Label>
-                    <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} placeholder={language === "hi" ? "जैसे इंडस्ट्रियल मोटर असेंबली" : "e.g. Industrial Motor Assembly"} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>{t("labelCategory")}</Label>
-                    <Select value={form.category} onValueChange={v => setForm({ ...form, category: v })}>
-                      <SelectTrigger><SelectValue placeholder={language === "hi" ? "श्रेणी चुनें" : "Select category"} /></SelectTrigger>
-                      <SelectContent>
-                        {["Electrical Equipment", "Defence Electronics", "Aerospace", "Defence", "Telecom", "IT Hardware", "Heavy Engineering", "Naval Engineering", "Metallurgy"].map(c => (
-                          <SelectItem key={c} value={c}>{c}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2"><Label>{t("productHSN")}</Label><Input value={form.hsnCode} onChange={e => setForm({ ...form, hsnCode: e.target.value })} placeholder="e.g. 8501" /></div>
-                    <div className="space-y-2"><Label>{language === "hi" ? "अनुमानित लागत (₹)" : "Estimated Cost (₹)"}</Label><Input type="number" value={form.estimatedCost} onChange={e => setForm({ ...form, estimatedCost: e.target.value })} placeholder="245000" /></div>
-                  </div>
-                  <Button onClick={handleSubmit} className="w-full gradient-primary text-primary-foreground">{language === "hi" ? "उत्पाद पंजीकृत करें" : "Register Product"}</Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+          isSupplier || user?.role === "admin" ? (
+            <Button
+              onClick={() => navigate("/products/new")}
+              className="gradient-primary text-primary-foreground gap-2"
+            >
+              <Plus className="h-4 w-4" /> Register New Product
+            </Button>
           ) : null
         }
       />
 
       <Card>
         <CardContent className="p-6">
-          <DataTable data={displayProducts} columns={columns} searchKeys={["name", "supplierName", "category", "hsnCode"]} exportFilename="nmicov-products" pageSize={12} />
+          <DataTable
+            data={products}
+            columns={columns}
+            searchKeys={["name", "category"]}
+            exportFilename="nmicov-products"
+            pageSize={12}
+          />
         </CardContent>
       </Card>
     </div>

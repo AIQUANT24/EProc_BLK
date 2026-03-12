@@ -5,6 +5,10 @@ import cookieParser from "cookie-parser";
 import { sequelize, initSequelize } from "./config/db.js";
 import { initModels } from "./models/index.js";
 import authRoutes from "./routes/auth.routes.js";
+import userRoutes from "./routes/user.routes.js";
+import supplierRoutes from "./routes/supplier.routes.js";
+import productsRoutes from "./routes/products.routes.js";
+import componentRoutes from "./routes/component.routes.js";
 
 export async function bootstrap(): Promise<void> {
   try {
@@ -58,6 +62,10 @@ export async function bootstrap(): Promise<void> {
 
   // other routes
   app.use("/api/auth", authRoutes);
+  app.use("/api/users", userRoutes);
+  app.use("/api/suppliers", supplierRoutes);
+  app.use("/api/products", productsRoutes);
+  app.use("/api/components", componentRoutes);
 
   app.listen(config.PORT, () =>
     console.log(

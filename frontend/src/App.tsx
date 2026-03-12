@@ -14,7 +14,6 @@ import Products from "@/pages/Products";
 import BOMManagement from "@/pages/BOMManagement";
 import DVAResults from "@/pages/DVAResults";
 import Compliance from "@/pages/Compliance";
-import RiskAlerts from "@/pages/RiskAlerts";
 import Verification from "@/pages/Verification";
 import AuditLogs from "@/pages/AuditLogs";
 import UserManagement from "@/pages/UserManagement";
@@ -24,6 +23,8 @@ import Index from "@/pages/Index";
 import Signup from "@/pages/Signup";
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
+import SupplierProfilePage from "./components/suppliers/SupplierProfilePage";
+import NewProduct from "./components/products/NewProductPage";
 
 const queryClient = new QueryClient();
 
@@ -49,11 +50,15 @@ const App = () => (
                 <Route element={<AppLayout />}>
                   <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/suppliers" element={<Suppliers />} />
+                  <Route
+                    path="/suppliers/profile"
+                    element={<SupplierProfilePage />}
+                  />
                   <Route path="/products" element={<Products />} />
+                  <Route path="/products/new" element={<NewProduct />} />
                   <Route path="/bom" element={<BOMManagement />} />
                   <Route path="/dva" element={<DVAResults />} />
                   <Route path="/compliance" element={<Compliance />} />
-                  <Route path="/alerts" element={<RiskAlerts />} />
                   <Route path="/verification" element={<Verification />} />
                   <Route path="/audit" element={<AuditLogs />} />
                   <Route path="/users" element={<UserManagement />} />

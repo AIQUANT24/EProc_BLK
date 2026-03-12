@@ -24,6 +24,7 @@ export const UserController = {
         organization,
         department,
         password: config.DEFAULT_PASSWORD,
+        status: "inactive",
       });
 
       res.status(201).json({
@@ -38,7 +39,13 @@ export const UserController = {
         },
       });
     } catch (error: any) {
-      res.status(400).json({ error: error.message });
+      res
+        .status(400)
+        .json({
+          error: error,
+          message: "Failed to create user",
+          success: false,
+        });
     }
   },
 

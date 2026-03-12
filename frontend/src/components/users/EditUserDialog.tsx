@@ -1,101 +1,181 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useMockData } from "@/contexts/MockDataContext";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
-import type { PlatformUser } from "@/contexts/MockDataContext";
+import { Loader2 } from "lucide-react";
 
 interface EditUserDialogProps {
-  user: PlatformUser | null;
+  user: any | null; // Replace 'any' with your DBUser type
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
 }
 
-const EditUserDialog = ({ user, open, onOpenChange }: EditUserDialogProps) => {
-  const { updateUser } = useMockData();
-  const [name, setName] = useState("");
+const API_URL = import.meta.env.VITE_API_URL;
+
+const EditUserDialog = ({
+  user,
+  open,
+  onOpenChange,
+  onSuccess,
+}: EditUserDialogProps) => {
+  const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<PlatformUser["role"]>("procurement");
+  const [role, setRole] = useState("");
   const [organization, setOrganization] = useState("");
   const [department, setDepartment] = useState("");
-  const [status, setStatus] = useState<PlatformUser["status"]>("active");
+  const [status, setStatus] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (user) {
-      setName(user.name);
-      setEmail(user.email);
-      setRole(user.role);
-      setOrganization(user.organization);
-      setDepartment(user.department);
-      setStatus(user.status);
+      setFullName(user.fullName || "");
+      setEmail(user.email || "");
+      setRole(user.role || "procurement");
+      setOrganization(user.organization || "");
+      setDepartment(user.department || "");
+      setStatus(user.status || "active");
     }
   }, [user]);
 
-  const handleSave = () => {
-    if (!user || !name || !email) {
+  const handleSave = async () => {
+    if (!user || !fullName || !email) {
       toast.error("Please fill in required fields");
       return;
     }
-    updateUser(user.id, { name, email, role, organization, department, status });
-    toast.success(`User "${name}" updated`);
-    onOpenChange(false);
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch(`${API_URL}/users/${user.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          fullName,
+          email,
+          role,
+          organization,
+          department,
+          status,
+        }),
+        credentials: "include",
+      });
+
+      if (response.ok) {
+        toast.success(`User updated successfully`);
+        onSuccess();
+        onOpenChange(false);
+      } else {
+        const data = await response.json();
+        toast.error(data.message || "Update failed");
+      }
+    } catch (err) {
+      toast.error("Could not reach the server");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Edit User</DialogTitle>
-          <DialogDescription>Update user details for {user?.id}</DialogDescription>
+          <DialogTitle>Edit User Details</DialogTitle>
+          <DialogDescription>
+            System ID: {user?.id.slice(0, 8)}...
+          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="usr-name">Name *</Label>
-            <Input id="usr-name" value={name} onChange={e => setName(e.target.value)} />
+            <Label htmlFor="edit-name">Full Name *</Label>
+            <Input
+              id="edit-name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="usr-email">Email *</Label>
-            <Input id="usr-email" type="email" value={email} onChange={e => setEmail(e.target.value)} />
+            <Label htmlFor="edit-email">Email Address *</Label>
+            <Input
+              id="edit-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={role} onValueChange={setRole}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="superadmin">Superadmin</SelectItem>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="procurement">Procurement</SelectItem>
+                  <SelectItem value="supplier">Supplier</SelectItem>
+                  <SelectItem value="auditor">Auditor</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Account Status</Label>
+              <Select value={status} onValueChange={setStatus}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="inactive">Inactive</SelectItem>
+                  <SelectItem value="suspended">Suspended</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
           <div className="space-y-2">
-            <Label>Role</Label>
-            <Select value={role} onValueChange={v => setRole(v as PlatformUser["role"])}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="superadmin">Superadmin</SelectItem>
-                <SelectItem value="admin">Admin</SelectItem>
-                <SelectItem value="procurement">Procurement</SelectItem>
-                <SelectItem value="supplier">Supplier</SelectItem>
-                <SelectItem value="auditor">Auditor</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="usr-org">Organization</Label>
-            <Input id="usr-org" value={organization} onChange={e => setOrganization(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="usr-dept">Department</Label>
-            <Input id="usr-dept" value={department} onChange={e => setDepartment(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label>Status</Label>
-            <Select value={status} onValueChange={v => setStatus(v as PlatformUser["status"])}>
-              <SelectTrigger><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="inactive">Inactive</SelectItem>
-                <SelectItem value="suspended">Suspended</SelectItem>
-              </SelectContent>
-            </Select>
+            <Label htmlFor="edit-org">Organization</Label>
+            <Input
+              id="edit-org"
+              value={organization}
+              onChange={(e) => setOrganization(e.target.value)}
+            />
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button onClick={handleSave} className="gradient-primary text-primary-foreground">Save Changes</Button>
+        <DialogFooter className="mt-6">
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={isSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSave}
+            disabled={isSubmitting}
+            className="gradient-primary text-primary-foreground"
+          >
+            {isSubmitting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              "Save Changes"
+            )}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

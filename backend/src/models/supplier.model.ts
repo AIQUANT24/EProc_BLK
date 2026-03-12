@@ -1,39 +1,22 @@
+// models/supplier.model.ts
 import { Model, DataTypes, Sequelize, Optional } from "sequelize";
 
-// 1. Full attributes interface
 interface SupplierAttributes {
   id: string;
   user_id: string;
-  name: string;
-  email: string;
-  gst_number: string | null;
-  pan_number: string | null;
-  udyam_number: string | null;
-  organization_type:
-    | "proprietorship"
-    | "partnership"
-    | "pvt_ltd"
-    | "public_ltd"
-    | "llp"
-    | null;
-  manufacturing_location: string | null;
-  status: "pending" | "verified" | "rejected" | "suspended";
-  created_at?: Date;
-  updated_at?: Date;
+  gst: string;
+  pan: string;
+  udyam: string;
+  location: string;
+  state: string;
+  msme_status: string;
+  sector: string;
+  products_count: number;
 }
 
-// 2. Attributes optional during .create()
 interface SupplierCreationAttributes extends Optional<
   SupplierAttributes,
-  | "id"
-  | "gst_number"
-  | "pan_number"
-  | "udyam_number"
-  | "organization_type"
-  | "manufacturing_location"
-  | "status"
-  | "created_at"
-  | "updated_at"
+  "id" | "products_count"
 > {}
 
 export default class Supplier
@@ -42,32 +25,22 @@ export default class Supplier
 {
   public id!: string;
   public user_id!: string;
-  public name!: string;
-  public email!: string;
-  public gst_number!: string | null;
-  public pan_number!: string | null;
-  public udyam_number!: string | null;
-  public organization_type!:
-    | "proprietorship"
-    | "partnership"
-    | "pvt_ltd"
-    | "public_ltd"
-    | "llp"
-    | null;
-  public manufacturing_location!: string | null;
-  public status!: "pending" | "verified" | "rejected" | "suspended";
+  public gst!: string;
+  public pan!: string;
+  public udyam!: string;
+  public location!: string;
+  public state!: string;
+  public msme_status!: string;
+  public sector!: string;
+  public products_count!: number;
 
-  public readonly created_at!: Date;
-  public readonly updated_at!: Date;
-
-  // Association Helper
   static associate(models: any) {
+    // CRITICAL: Alias is set to "user"
+    Supplier.belongsTo(models.User, { foreignKey: "user_id", as: "user" });
     Supplier.hasMany(models.Product, {
       foreignKey: "supplier_id",
       as: "products",
-      onDelete: "CASCADE",
     });
-    // If you have a User model, you'd associate user_id here
   }
 }
 
@@ -79,52 +52,15 @@ export function initSupplierModel(sequelize: Sequelize) {
         defaultValue: DataTypes.UUIDV4,
         primaryKey: true,
       },
-      user_id: {
-        type: DataTypes.UUID,
-        allowNull: false,
-      },
-      name: {
-        type: DataTypes.STRING,
-        allowNull: false,
-      },
-      email: {
-        type: DataTypes.STRING,
-        allowNull: false,
-        validate: { isEmail: true },
-      },
-      gst_number: {
-        type: DataTypes.STRING,
-        unique: true, // Prevents duplicate registrations
-        allowNull: true,
-      },
-      pan_number: {
-        type: DataTypes.STRING,
-        unique: true,
-        allowNull: true,
-      },
-      udyam_number: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-      organization_type: {
-        type: DataTypes.ENUM(
-          "proprietorship",
-          "partnership",
-          "pvt_ltd",
-          "public_ltd",
-          "llp",
-        ),
-        allowNull: true,
-      },
-      manufacturing_location: {
-        type: DataTypes.STRING,
-        allowNull: true,
-      },
-      status: {
-        type: DataTypes.ENUM("pending", "verified", "rejected", "suspended"),
-        defaultValue: "pending",
-        allowNull: false,
-      },
+      user_id: { type: DataTypes.UUID, allowNull: false, unique: true },
+      gst: { type: DataTypes.STRING(20), unique: true },
+      pan: { type: DataTypes.STRING(10), unique: true },
+      udyam: { type: DataTypes.STRING, unique: true },
+      location: { type: DataTypes.STRING, allowNull: false },
+      state: { type: DataTypes.STRING, allowNull: false },
+      msme_status: { type: DataTypes.STRING, allowNull: false },
+      sector: { type: DataTypes.STRING, allowNull: false },
+      products_count: { type: DataTypes.INTEGER, defaultValue: 0 },
     },
     {
       sequelize,
@@ -132,13 +68,7 @@ export function initSupplierModel(sequelize: Sequelize) {
       tableName: "suppliers",
       underscored: true,
       timestamps: true,
-      indexes: [
-        { fields: ["user_id"] },
-        { fields: ["status"] },
-        { fields: ["email"] },
-      ],
     },
   );
-
   return Supplier;
 }

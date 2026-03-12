@@ -34,6 +34,7 @@ export const authController = {
         role,
         organization,
         department,
+        status: "inactive",
       });
 
       // Generate JWT
@@ -62,7 +63,13 @@ export const authController = {
         },
       });
     } catch (error: any) {
-      res.status(500).json({ error: error.message });
+      res
+        .status(500)
+        .json({
+          error: error,
+          message: "Failed to register user",
+          success: false,
+        });
     }
   },
 
@@ -73,7 +80,9 @@ export const authController = {
 
       const user = await UserModel.findOne({ where: { email } });
       if (!user) return res.status(404).json({ message: "User not found" });
-
+      // make user active
+      user.status = "active";
+      await user.save();
       // Compare password
       const isMatch = await bcrypt.compare(password, user.password);
       if (!isMatch)
@@ -107,8 +116,11 @@ export const authController = {
 
   // --- LOGOUT ---
   logout: (req: Request, res: Response) => {
+    // Clear cookie
     res.clearCookie(config.COOKIE_NAME);
     res.status(200).json({ message: "Logged out successfully" });
+    // make user inactive
+    UserModel.update({ status: "inactive" }, { where: { id: req.user?.id } });
   },
 
   profile: async (req: Request, res: Response) => {
@@ -132,6 +144,7 @@ export const authController = {
           role: user.role,
           organization: user.organization,
           department: user.department,
+          status: user.status,
         },
       });
     } catch (error) {

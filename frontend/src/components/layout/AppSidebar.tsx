@@ -62,12 +62,6 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["superadmin", "admin", "procurement", "auditor"],
   },
   {
-    label: "Risk Alerts",
-    path: "/alerts",
-    icon: <AlertTriangle className="h-5 w-5" />,
-    roles: ["superadmin", "admin", "procurement"],
-  },
-  {
     label: "Verification Logs",
     path: "/verification",
     icon: <Search className="h-5 w-5" />,

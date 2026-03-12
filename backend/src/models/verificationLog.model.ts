@@ -1,33 +1,32 @@
 import { Model, DataTypes, Sequelize, Optional } from "sequelize";
 
-// 1. Full attributes interface
+type VerificationStatus = "pending" | "verified" | "failed" | "rejected";
+
 interface VerificationLogAttributes {
   id: string;
-  product_id: string | null;
-  requested_by: string; // User ID or Name who triggered the action
-  dva_score: number | string | null;
-  classification: string | null;
-  confidence_score: number | string | null;
-  risk_score: number | string | null;
-  compliance_status: "pending" | "verified" | "flagged" | "rejected" | null;
-  blockchain_tx_hash: string | null;
-  response_payload: Record<string, any> | null;
-  created_at?: Date;
+  product_id?: string; // Optional because allowNull: true
+  supplier_id?: string;
+  requested_by: string;
+  status: VerificationStatus;
+  dva_score?: string; // Decimal returns as string
+  classification?: string;
+  confidence_score?: string;
+  risk_score?: string;
+  blockchain_tx_hash?: string;
 }
 
-// 2. Attributes optional during .create()
+// Add all fields with default values or allowNull: true here
 interface VerificationLogCreationAttributes extends Optional<
   VerificationLogAttributes,
   | "id"
+  | "status"
   | "product_id"
+  | "supplier_id"
+  | "blockchain_tx_hash"
   | "dva_score"
-  | "classification"
   | "confidence_score"
   | "risk_score"
-  | "compliance_status"
-  | "blockchain_tx_hash"
-  | "response_payload"
-  | "created_at"
+  | "classification"
 > {}
 
 export default class VerificationLog
@@ -35,25 +34,17 @@ export default class VerificationLog
   implements VerificationLogAttributes
 {
   public id!: string;
-  public product_id!: string | null;
+  public product_id?: string;
+  public supplier_id?: string;
   public requested_by!: string;
-  public dva_score!: number | string | null;
-  public classification!: string | null;
-  public confidence_score!: number | string | null;
-  public risk_score!: number | string | null;
-  public compliance_status!:
-    | "pending"
-    | "verified"
-    | "flagged"
-    | "rejected"
-    | null;
-  public blockchain_tx_hash!: string | null;
-  public response_payload!: Record<string, any> | null;
-
-  public readonly created_at!: Date;
+  public status!: VerificationStatus;
+  public dva_score?: string;
+  public classification?: string;
+  public confidence_score?: string;
+  public risk_score?: string;
+  public blockchain_tx_hash?: string;
 
   static associate(models: any) {
-    // Optional link for performance, though audit logs often stand alone
     VerificationLog.belongsTo(models.Product, {
       foreignKey: "product_id",
       as: "product",
@@ -93,17 +84,18 @@ export function initVerificationLogModel(sequelize: Sequelize) {
         type: DataTypes.DECIMAL(5, 2),
         allowNull: true,
       },
-      compliance_status: {
-        type: DataTypes.ENUM("pending", "verified", "flagged", "rejected"),
-        allowNull: true,
-      },
       blockchain_tx_hash: {
         type: DataTypes.STRING,
         allowNull: true,
       },
-      response_payload: {
-        type: DataTypes.JSON, // Optimized for Postgres querying
+      supplier_id: {
+        type: DataTypes.UUID,
         allowNull: true,
+      },
+      status: {
+        type: DataTypes.ENUM("pending", "verified", "failed", "rejected"),
+        allowNull: false,
+        defaultValue: "pending",
       },
     },
     {
@@ -113,7 +105,7 @@ export function initVerificationLogModel(sequelize: Sequelize) {
       underscored: true,
       timestamps: true,
       createdAt: "created_at",
-      updatedAt: false, // Audit logs should be immutable
+      updatedAt: false, // Solid choice for an audit log
       indexes: [
         { fields: ["product_id"] },
         { fields: ["requested_by"] },

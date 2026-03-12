@@ -1,29 +1,24 @@
 import { Model, DataTypes, Sequelize, Optional } from "sequelize";
 
-// 1. Define all attributes
+// 1. Updated Type to include "critical"
+type SeverityLevel = "low" | "medium" | "high" | "critical";
+
 interface RiskAlertAttributes {
   id: string;
   product_id: string;
-  rule_id: string;
-  severity: "low" | "medium" | "high" | "critical";
-  details: string | null;
-  status: "active" | "investigating" | "resolved" | "dismissed";
-  resolved_by: string | null;
-  resolved_at: Date | null;
-  blockchain_tx_hash: string | null;
-  created_at?: Date;
+  supplier_id: string;
+  alert_type: string;
+  severity: SeverityLevel;
+  description: string;
+  details?: string;
+  ruleId?: string;
+  resolved: boolean;
 }
 
-// 2. Define optional attributes for creation
+// 2. Added "resolved" to Optional for easier creation
 interface RiskAlertCreationAttributes extends Optional<
   RiskAlertAttributes,
-  | "id"
-  | "details"
-  | "status"
-  | "resolved_by"
-  | "resolved_at"
-  | "blockchain_tx_hash"
-  | "created_at"
+  "id" | "details" | "ruleId" | "resolved"
 > {}
 
 export default class RiskAlert
@@ -32,16 +27,14 @@ export default class RiskAlert
 {
   public id!: string;
   public product_id!: string;
-  public rule_id!: string;
-  public severity!: "low" | "medium" | "high" | "critical";
-  public details!: string | null;
-  public status!: "active" | "investigating" | "resolved" | "dismissed";
-  public resolved_by!: string | null;
-  public resolved_at!: Date | null;
-  public blockchain_tx_hash!: string | null;
-  public readonly created_at!: Date;
+  public supplier_id!: string;
+  public alert_type!: string;
+  public severity!: SeverityLevel;
+  public description!: string;
+  public details?: string;
+  public ruleId?: string;
+  public resolved!: boolean;
 
-  // Association Helper
   static associate(models: any) {
     RiskAlert.belongsTo(models.Product, {
       foreignKey: "product_id",
@@ -62,7 +55,11 @@ export function initRiskAlertModel(sequelize: Sequelize) {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      rule_id: {
+      supplier_id: {
+        type: DataTypes.UUID,
+        allowNull: false,
+      },
+      alert_type: {
         type: DataTypes.STRING,
         allowNull: false,
       },
@@ -74,27 +71,18 @@ export function initRiskAlertModel(sequelize: Sequelize) {
         type: DataTypes.TEXT,
         allowNull: true,
       },
-      status: {
-        type: DataTypes.ENUM(
-          "active",
-          "investigating",
-          "resolved",
-          "dismissed",
-        ),
-        defaultValue: "active",
+      description: {
+        type: DataTypes.TEXT,
         allowNull: false,
       },
-      resolved_by: {
-        type: DataTypes.UUID,
-        allowNull: true,
-      },
-      resolved_at: {
-        type: DataTypes.DATE,
-        allowNull: true,
-      },
-      blockchain_tx_hash: {
+      ruleId: {
         type: DataTypes.STRING,
         allowNull: true,
+      },
+      resolved: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
       },
     },
     {
@@ -108,7 +96,7 @@ export function initRiskAlertModel(sequelize: Sequelize) {
       indexes: [
         { fields: ["product_id"] },
         { fields: ["severity"] },
-        { fields: ["status"] },
+        { fields: ["resolved"] }, // Fixed: Changed 'status' to 'resolved'
       ],
     },
   );

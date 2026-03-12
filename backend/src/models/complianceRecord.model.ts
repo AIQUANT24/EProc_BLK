@@ -1,26 +1,25 @@
 import { Model, DataTypes, Sequelize, Optional } from "sequelize";
 
-// 1. Define the full set of attributes
+// Define shared types to ensure Sync
+type ComplianceStatus = "pending" | "verified" | "flagged" | "rejected";
+type ClassificationType = "Class I" | "Class II" | "Non-Local";
+
 interface ComplianceRecordAttributes {
   id: string;
   product_id: string;
-  dva_result_id: string | null;
-  status: "pending" | "verified" | "flagged" | "rejected"; // Better than a raw string
-  verified_by: string | null;
-  verification_notes: string | null;
-  blockchain_tx_hash: string | null;
-  created_at?: Date;
+  supplier_id: string;
+  category: string;
+  dva_score: string;
+  classification: ClassificationType;
+  confidenceScore: number;
+  riskScore: number;
+  status: ComplianceStatus; // Synced with DB
+  blockchainTxHash?: string;
 }
 
-// 2. Define optional attributes for the .create() method
 interface ComplianceRecordCreationAttributes extends Optional<
   ComplianceRecordAttributes,
-  | "id"
-  | "dva_result_id"
-  | "verified_by"
-  | "verification_notes"
-  | "blockchain_tx_hash"
-  | "created_at"
+  "id" | "status" | "blockchainTxHash" // Added status and txHash as optional
 > {}
 
 export default class ComplianceRecord
@@ -29,22 +28,19 @@ export default class ComplianceRecord
 {
   public id!: string;
   public product_id!: string;
-  public dva_result_id!: string | null;
-  public status!: "pending" | "verified" | "flagged" | "rejected";
-  public verified_by!: string | null;
-  public verification_notes!: string | null;
-  public blockchain_tx_hash!: string | null;
-  public readonly created_at!: Date;
+  public supplier_id!: string;
+  public category!: string;
+  public dva_score!: string;
+  public classification!: ClassificationType;
+  public confidenceScore!: number;
+  public riskScore!: number;
+  public status!: ComplianceStatus;
+  public blockchainTxHash?: string;
 
-  // Association Helper
   static associate(models: any) {
     ComplianceRecord.belongsTo(models.Product, {
       foreignKey: "product_id",
       as: "product",
-    });
-    ComplianceRecord.belongsTo(models.DvaResult, {
-      foreignKey: "dva_result_id",
-      as: "dvaResult",
     });
   }
 }
@@ -61,26 +57,40 @@ export function initComplianceRecordModel(sequelize: Sequelize) {
         type: DataTypes.UUID,
         allowNull: false,
       },
-      dva_result_id: {
-        type: DataTypes.UUID,
-        allowNull: true,
-      },
       status: {
+        // MUST match the TypeScript type ComplianceStatus
         type: DataTypes.ENUM("pending", "verified", "flagged", "rejected"),
         allowNull: false,
         defaultValue: "pending",
       },
-      verified_by: {
-        type: DataTypes.UUID,
-        allowNull: true,
-      },
-      verification_notes: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-      },
-      blockchain_tx_hash: {
+      blockchainTxHash: {
         type: DataTypes.STRING,
         allowNull: true,
+      },
+      supplier_id: {
+        type: DataTypes.UUID,
+        allowNull: false,
+      },
+      category: {
+        type: DataTypes.STRING,
+        allowNull: false,
+      },
+      dva_score: {
+        type: DataTypes.STRING,
+        allowNull: false,
+      },
+      classification: {
+        type: DataTypes.ENUM("Class I", "Class II", "Non-Local"),
+        allowNull: false,
+      },
+      confidenceScore: {
+        // Changed to FLOAT so Sequelize returns a number instead of a string
+        type: DataTypes.FLOAT,
+        allowNull: false,
+      },
+      riskScore: {
+        type: DataTypes.FLOAT,
+        allowNull: false,
       },
     },
     {

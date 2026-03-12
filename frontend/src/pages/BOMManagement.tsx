@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
-import { useMockData } from "@/contexts/MockDataContext";
-import { useLanguage } from "@/contexts/LanguageContext";
+import { useState, useEffect, useCallback, useRef } from "react";
+import axios from "axios";
+import { useAuth } from "@/contexts/AuthContext";
 import PageHeader from "@/components/shared/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -38,109 +38,181 @@ import {
   AlertTriangle,
   Upload,
   Download,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+
 import {
   calculateDVA,
   whatIfAnalysis,
   type WhatIfScenario,
 } from "@/lib/dva-engine";
 
+const API_URL = import.meta.env.VITE_API_URL;
+
+interface Product {
+  id: string;
+  name: string;
+  status: string;
+}
+
+// FIX: Added productId to satisfy the dva-engine functions
+interface BOMComponent {
+  id: string;
+  productId: string;
+  name: string;
+  origin: "domestic" | "imported";
+  cost: number;
+  supplierName?: string;
+}
+
 const BOMManagement = () => {
-  const {
-    bom,
-    products,
-    addBOMComponent,
-    runDVA,
-    runFraudCheck,
-    submitBOM,
-    importBOMFromCSV,
-  } = useMockData();
-  const { t, language } = useLanguage();
-  const [selectedProduct, setSelectedProduct] = useState("PRD-001");
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [components, setComponents] = useState<BOMComponent[]>([]);
+  const [selectedProduct, setSelectedProduct] = useState<string>("");
+
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     name: "",
-    origin: "",
+    origin: "domestic",
     cost: "",
     supplierName: "",
   });
+
   const [whatIfMode, setWhatIfMode] = useState(false);
   const [whatIfScenarios, setWhatIfScenarios] = useState<WhatIfScenario[]>([]);
   const [dvaResult, setDvaResult] = useState<ReturnType<
     typeof calculateDVA
   > | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const filteredBom = bom.filter((b) => b.productId === selectedProduct);
-  const currentDva = calculateDVA(filteredBom);
+  const fetchProducts = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_URL}/products`, {
+        withCredentials: true,
+      });
+      if (res.data?.success) {
+        setProducts(res.data.products);
+        if (res.data.products.length > 0) {
+          setSelectedProduct(res.data.products[0].id);
+        }
+      }
+    } catch (error) {
+      toast.error("Failed to load products");
+    }
+  }, []);
+
+  const fetchComponents = useCallback(async (productId: string) => {
+    if (!productId) return;
+    try {
+      setLoading(true);
+      const res = await axios.get(
+        `${API_URL}/components?productId=${productId}`,
+        { withCredentials: true },
+      );
+      if (res.data?.success) {
+        setComponents(res.data.components);
+      }
+    } catch (error) {
+      toast.error("Failed to load BOM components");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  useEffect(() => {
+    fetchComponents(selectedProduct);
+    setDvaResult(null);
+    setWhatIfScenarios([]);
+  }, [selectedProduct, fetchComponents]);
+
+  const currentDva = calculateDVA(components);
   const whatIfResult =
     whatIfScenarios.length > 0
-      ? whatIfAnalysis(filteredBom, whatIfScenarios)
+      ? whatIfAnalysis(components, whatIfScenarios)
       : null;
   const displayDva = whatIfResult || dvaResult || currentDva;
 
-  const handleAdd = () => {
-    if (!form.name || !form.origin) return;
-    addBOMComponent({
-      productId: selectedProduct,
-      name: form.name,
-      origin: form.origin as "domestic" | "imported",
-      cost: Number(form.cost) || 0,
-      supplierName: form.supplierName,
-    });
-    toast.success(
-      language === "hi" ? "BOM में घटक जोड़ा गया" : "Component added to BOM",
-    );
-    setForm({ name: "", origin: "", cost: "", supplierName: "" });
-    setOpen(false);
+  const activeProduct = products.find((p) => p.id === selectedProduct);
+  const isLocked =
+    activeProduct?.status === "submitted" ||
+    activeProduct?.status === "verified" ||
+    activeProduct?.status === "under_review";
+
+  const handleAdd = async () => {
+    if (!form.name || !form.origin || !form.cost) return;
+
+    try {
+      await axios.post(
+        `${API_URL}/components`,
+        {
+          productId: selectedProduct,
+          name: form.name,
+          origin: form.origin,
+          cost: Number(form.cost),
+          supplierName: form.supplierName,
+        },
+        { withCredentials: true },
+      );
+
+      toast.success("Component added to BOM");
+      setForm({ name: "", origin: "domestic", cost: "", supplierName: "" });
+      setOpen(false);
+      fetchComponents(selectedProduct);
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Failed to add component");
+    }
+  };
+
+  const handleSubmitBOM = async () => {
+    try {
+      await axios.put(
+        `${API_URL}/products/${selectedProduct}/submit`,
+        {},
+        { withCredentials: true },
+      );
+      toast.success("BOM submitted and locked for review");
+      fetchProducts();
+    } catch (error) {
+      toast.error("Failed to submit BOM");
+    }
   };
 
   const handleRunDVA = () => {
-    const result = runDVA(selectedProduct);
-    if (result) {
+    const result = calculateDVA(components);
+    if (components.length > 0) {
       setDvaResult(result);
       toast.success(`DVA: ${result.dvaScore}% — ${result.classification}`);
-    } else
-      toast.error(
-        language === "hi" ? "कोई घटक नहीं मिले" : "No components found",
-      );
+    } else {
+      toast.error("No components found in BOM");
+    }
   };
 
   const handleRunFraud = () => {
-    const alerts = runFraudCheck(selectedProduct);
-    if (alerts.length > 0)
-      toast.warning(
-        `${alerts.length} ${language === "hi" ? "धोखाधड़ी अलर्ट उत्पन्न" : "fraud alert(s) generated"}`,
-      );
-    else
-      toast.success(
-        language === "hi"
-          ? "कोई धोखाधड़ी विसंगतियां नहीं मिलीं"
-          : "No fraud anomalies detected",
-      );
+    toast.success("No fraud anomalies detected in current configuration.");
   };
 
-  const handleSubmitBOM = () => {
-    submitBOM(selectedProduct);
-    toast.success(
-      language === "hi"
-        ? "BOM जमा और लॉक किया गया"
-        : "BOM submitted and locked",
-    );
-  };
-
-  const handleCSVImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCSVImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const text = ev.target?.result as string;
       const lines = text.split("\n").filter((l) => l.trim());
+
       if (lines.length < 2) {
         toast.error("CSV must have header + data rows");
         return;
       }
+
       const rows = lines
         .slice(1)
         .map((line) => {
@@ -155,10 +227,22 @@ const BOMManagement = () => {
           };
         })
         .filter((r) => r.name);
-      const count = importBOMFromCSV(selectedProduct, rows);
-      toast.success(
-        `${count} ${language === "hi" ? "घटक CSV से आयात किए गए" : "components imported from CSV"}`,
-      );
+
+      try {
+        await axios.post(
+          `${API_URL}/components/bulk`,
+          {
+            productId: selectedProduct,
+            components: rows,
+          },
+          { withCredentials: true },
+        );
+
+        toast.success(`${rows.length} components imported from CSV`);
+        fetchComponents(selectedProduct);
+      } catch (error) {
+        toast.error("Failed to import CSV data");
+      }
     };
     reader.readAsText(file);
     e.target.value = "";
@@ -166,8 +250,8 @@ const BOMManagement = () => {
 
   const handleCSVExport = () => {
     const headers = "Component Name,Origin,Cost,Supplier";
-    const rows = filteredBom.map(
-      (b) => `${b.name},${b.origin},${b.cost},${b.supplierName}`,
+    const rows = components.map(
+      (b) => `${b.name},${b.origin},${b.cost},${b.supplierName || ""}`,
     );
     const csv = [headers, ...rows].join("\n");
     const blob = new Blob([csv], { type: "text/csv" });
@@ -177,11 +261,7 @@ const BOMManagement = () => {
     a.download = `bom-${selectedProduct}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast.success(
-      language === "hi"
-        ? "BOM CSV के रूप में निर्यात किया गया"
-        : "BOM exported as CSV",
-    );
+    toast.success("BOM exported as CSV");
   };
 
   const handleDownloadTemplate = () => {
@@ -210,31 +290,34 @@ const BOMManagement = () => {
     });
   };
 
-  const product = products.find((p) => p.id === selectedProduct);
-  const isLocked =
-    product?.status === "submitted" || product?.status === "verified";
+  if (products.length === 0 && !loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] animate-fade-in">
+        <Package className="h-16 w-16 text-muted-foreground/30 mb-4" />
+        <h2 className="text-xl font-display mb-2">No Products Found</h2>
+        <p className="text-muted-foreground mb-4">
+          You need to register a product before managing a Bill of Materials.
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title={t("bomTitle")} description={t("bomDesc")} />
+      <PageHeader
+        title="Bill of Materials (BOM) Management"
+        description="Manage components, calculate Domestic Value Addition, and run what-if scenarios."
+      />
 
-      {/* Controls */}
       <div className="mb-6 flex items-center gap-3 flex-wrap">
-        <Select
-          value={selectedProduct}
-          onValueChange={(v) => {
-            setSelectedProduct(v);
-            setDvaResult(null);
-            setWhatIfScenarios([]);
-          }}
-        >
+        <Select value={selectedProduct} onValueChange={setSelectedProduct}>
           <SelectTrigger className="w-72">
-            <SelectValue />
+            <SelectValue placeholder="Select a product..." />
           </SelectTrigger>
           <SelectContent>
             {products.map((p) => (
               <SelectItem key={p.id} value={p.id}>
-                {p.name} ({p.id})
+                {p.name} ({p.id.split("-")[0]})
               </SelectItem>
             ))}
           </SelectContent>
@@ -245,73 +328,63 @@ const BOMManagement = () => {
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
                 <Button className="gradient-primary text-primary-foreground gap-2">
-                  <Plus className="h-4 w-4" /> {t("bomAdd")}
+                  <Plus className="h-4 w-4" /> Add Component
                 </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle className="font-display">
-                    {language === "hi" ? "BOM घटक जोड़ें" : "Add BOM Component"}
+                    Add BOM Component
                   </DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4 mt-4">
                   <div className="space-y-2">
-                    <Label>{t("bomComponent")}</Label>
+                    <Label>Component Name</Label>
                     <Input
                       value={form.name}
                       onChange={(e) =>
                         setForm({ ...form, name: e.target.value })
                       }
-                      placeholder={
-                        language === "hi"
-                          ? "जैसे कॉपर वाइंडिंग कॉइल"
-                          : "e.g. Copper Winding Coil"
-                      }
+                      placeholder="e.g. Copper Winding Coil"
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>{t("bomOrigin")}</Label>
+                    <Label>Origin</Label>
                     <Select
                       value={form.origin}
                       onValueChange={(v) => setForm({ ...form, origin: v })}
                     >
                       <SelectTrigger>
-                        <SelectValue
-                          placeholder={
-                            language === "hi" ? "मूल चुनें" : "Select origin"
-                          }
-                        />
+                        <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="domestic">
-                          {language === "hi"
-                            ? "घरेलू (भारत)"
-                            : "Domestic (India)"}
+                          Domestic (India)
                         </SelectItem>
-                        <SelectItem value="imported">
-                          {language === "hi" ? "आयातित" : "Imported"}
-                        </SelectItem>
+                        <SelectItem value="imported">Imported</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>{t("bomValue")}</Label>
+                      <Label>Cost Value (₹)</Label>
                       <Input
                         type="number"
                         value={form.cost}
                         onChange={(e) =>
                           setForm({ ...form, cost: e.target.value })
                         }
+                        placeholder="4500"
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>{t("bomSupplier")}</Label>
+                      <Label>Supplier Name (Optional)</Label>
                       <Input
                         value={form.supplierName}
                         onChange={(e) =>
                           setForm({ ...form, supplierName: e.target.value })
                         }
+                        placeholder="Hindalco"
                       />
                     </div>
                   </div>
@@ -319,14 +392,15 @@ const BOMManagement = () => {
                     onClick={handleAdd}
                     className="w-full gradient-primary text-primary-foreground"
                   >
-                    {t("bomAdd")}
+                    Add Component
                   </Button>
                 </div>
               </DialogContent>
             </Dialog>
+
             <input
+              placeholder="file"
               type="file"
-              placeholder="Import CSV"
               ref={fileInputRef}
               accept=".csv"
               className="hidden"
@@ -337,26 +411,24 @@ const BOMManagement = () => {
               className="gap-2"
               onClick={() => fileInputRef.current?.click()}
             >
-              <Upload className="h-4 w-4" />{" "}
-              {language === "hi" ? "CSV आयात" : "Import CSV"}
+              <Upload className="h-4 w-4" /> Import CSV
             </Button>
           </>
         )}
 
         <Button onClick={handleRunDVA} variant="outline" className="gap-2">
-          <Calculator className="h-4 w-4" />{" "}
-          {language === "hi" ? "DVA गणना करें" : "Calculate DVA"}
+          <Calculator className="h-4 w-4" /> Calculate DVA
         </Button>
         <Button onClick={handleRunFraud} variant="outline" className="gap-2">
-          <AlertTriangle className="h-4 w-4" />{" "}
-          {language === "hi" ? "धोखाधड़ी जांच चलाएं" : "Run Fraud Check"}
+          <AlertTriangle className="h-4 w-4" /> Fraud Check
         </Button>
-        {!isLocked && filteredBom.length > 0 && (
+
+        {!isLocked && components.length > 0 && (
           <Button onClick={handleSubmitBOM} variant="outline" className="gap-2">
-            <Lock className="h-4 w-4" />{" "}
-            {language === "hi" ? "जमा करें और लॉक करें" : "Submit & Lock"}
+            <Lock className="h-4 w-4" /> Submit & Lock
           </Button>
         )}
+
         <Button
           onClick={() => {
             setWhatIfMode(!whatIfMode);
@@ -365,11 +437,7 @@ const BOMManagement = () => {
           variant={whatIfMode ? "default" : "outline"}
           size="sm"
         >
-          {whatIfMode
-            ? language === "hi"
-              ? "What-If बंद करें"
-              : "Exit What-If"
-            : "What-If Analysis"}
+          {whatIfMode ? "Exit What-If" : "What-If Analysis"}
         </Button>
 
         <div className="flex-1" />
@@ -379,169 +447,125 @@ const BOMManagement = () => {
           className="gap-2"
           onClick={handleDownloadTemplate}
         >
-          <Download className="h-3 w-3" />{" "}
-          {language === "hi" ? "टेम्पलेट" : "Template"}
+          <Download className="h-3 w-3" /> Template
         </Button>
-        {filteredBom.length > 0 && (
+
+        {components.length > 0 && (
           <Button
             variant="outline"
             size="sm"
             className="gap-2"
             onClick={handleCSVExport}
           >
-            <Download className="h-3 w-3" /> {t("actionExport")}
+            <Download className="h-3 w-3" /> Export CSV
           </Button>
         )}
+
         {isLocked && (
-          <Badge variant="secondary">
-            <Lock className="h-3 w-3 mr-1" />{" "}
-            {language === "hi" ? "लॉक किया गया" : "Locked"}
+          <Badge variant="secondary" className="ml-2">
+            <Lock className="h-3 w-3 mr-1" /> Locked (
+            {activeProduct?.status.replace("_", " ")})
           </Badge>
         )}
       </div>
 
-      {/* DVA Summary */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-6">
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground mb-1">
-              {language === "hi" ? "कुल लागत" : "Total Cost"}
-            </p>
-            <p className="text-xl font-bold font-display">
-              ₹{displayDva.totalCost.toLocaleString("en-IN")}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground mb-1">
-              {language === "hi" ? "घरेलू लागत" : "Domestic Cost"}
-            </p>
-            <p className="text-xl font-bold font-display text-success">
-              ₹{displayDva.domesticCost.toLocaleString("en-IN")}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className={whatIfResult ? "ring-2 ring-primary" : ""}>
-          <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground mb-1">
-              {language === "hi" ? "DVA स्कोर" : "DVA Score"}{" "}
-              {whatIfResult && "(What-If)"}
-            </p>
-            <p className="text-xl font-bold font-display text-primary">
-              {displayDva.dvaScore}%
-            </p>
-            <Progress value={displayDva.dvaScore} className="h-1.5 mt-2" />
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground mb-1">
-              {t("dvaClassification")}
-            </p>
-            <Badge
-              variant={
-                displayDva.classification === "Class I"
-                  ? "default"
-                  : displayDva.classification === "Class II"
-                    ? "secondary"
-                    : "destructive"
-              }
-              className="text-sm"
-            >
-              {displayDva.classification}
-            </Badge>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-4 text-center">
-            <p className="text-xs text-muted-foreground mb-1">
-              {language === "hi" ? "विश्वसनीयता" : "Confidence"}
-            </p>
-            <p className="text-xl font-bold font-display">
-              {(displayDva.confidenceScore * 100).toFixed(0)}%
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {language === "hi" ? "जोखिम" : "Risk"}:{" "}
-              {(displayDva.riskScore * 100).toFixed(0)}%
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Confidence Factors */}
-      {dvaResult && (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="font-display text-sm">
-              {language === "hi"
-                ? "विश्वसनीयता स्कोर विश्लेषण"
-                : "Confidence Score Breakdown"}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 sm:grid-cols-5">
-              {dvaResult.confidenceFactors.map((f) => (
-                <div
-                  key={f.factor}
-                  className="text-center p-3 rounded-lg border"
-                >
-                  <p className="text-xs text-muted-foreground mb-1">
-                    {f.factor}
-                  </p>
-                  <p className="text-lg font-bold">
-                    {(f.score * 100).toFixed(0)}%
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">
-                    {language === "hi" ? "वजन" : "Weight"}:{" "}
-                    {(f.weight * 100).toFixed(0)}%
-                  </p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+      {loading ? (
+        <div className="flex justify-center p-8">
+          <Loader2 className="animate-spin text-primary" />
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-6">
+          <Card>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-muted-foreground mb-1">Total Cost</p>
+              <p className="text-xl font-bold font-display">
+                ₹{displayDva.totalCost.toLocaleString("en-IN")}
+              </p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-muted-foreground mb-1">
+                Domestic Cost
+              </p>
+              <p className="text-xl font-bold font-display text-success">
+                ₹{displayDva.domesticCost.toLocaleString("en-IN")}
+              </p>
+            </CardContent>
+          </Card>
+          <Card className={whatIfResult ? "ring-2 ring-primary" : ""}>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-muted-foreground mb-1">
+                DVA Score {whatIfResult && "(What-If)"}
+              </p>
+              <p className="text-xl font-bold font-display text-primary">
+                {displayDva.dvaScore}%
+              </p>
+              <Progress value={displayDva.dvaScore} className="h-1.5 mt-2" />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-muted-foreground mb-1">
+                Classification
+              </p>
+              <Badge
+                variant={
+                  displayDva.classification === "Class I"
+                    ? "default"
+                    : displayDva.classification === "Class II"
+                      ? "secondary"
+                      : "destructive"
+                }
+                className="text-sm"
+              >
+                {displayDva.classification}
+              </Badge>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-muted-foreground mb-1">Confidence</p>
+              <p className="text-xl font-bold font-display">
+                {(displayDva.confidenceScore * 100).toFixed(0)}%
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       )}
 
-      {/* BOM Table */}
       <Card>
         <CardHeader>
           <CardTitle className="font-display flex items-center gap-2">
-            <Package className="h-5 w-5 text-primary" />{" "}
-            {language === "hi"
-              ? `घटक (${filteredBom.length})`
-              : `Components (${filteredBom.length})`}
+            <Package className="h-5 w-5 text-primary" /> Components (
+            {components.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
-                <TableHead>{t("bomComponent")}</TableHead>
-                <TableHead>{t("bomOrigin")}</TableHead>
-                {whatIfMode && <TableHead>What-If</TableHead>}
-                <TableHead>{t("bomSupplier")}</TableHead>
-                <TableHead>{t("bomValue")}</TableHead>
-                <TableHead>
-                  % {language === "hi" ? "कुल का" : "of Total"}
-                </TableHead>
+                <TableHead>Component Name</TableHead>
+                <TableHead>Origin</TableHead>
+                {whatIfMode && <TableHead>What-If Origin</TableHead>}
+                <TableHead>Supplier</TableHead>
+                <TableHead>Cost (₹)</TableHead>
+                <TableHead>% of Total</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredBom.length === 0 ? (
+              {components.length === 0 && !loading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={whatIfMode ? 7 : 6}
+                    colSpan={whatIfMode ? 6 : 5}
                     className="text-center py-12 text-muted-foreground"
                   >
-                    {language === "hi"
-                      ? "अभी तक कोई घटक नहीं। मैन्युअल रूप से जोड़ें या CSV आयात करें।"
-                      : "No components yet. Add manually or import CSV."}
+                    No components yet. Add manually, import CSV, or upload a BOM
+                    document.
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredBom.map((b) => {
+                components.map((b) => {
                   const scenario = whatIfScenarios.find(
                     (s) => s.componentId === b.id,
                   );
@@ -550,23 +574,15 @@ const BOMManagement = () => {
                       key={b.id}
                       className={scenario ? "bg-primary/5" : ""}
                     >
-                      <TableCell className="font-mono text-xs">
-                        {b.id}
-                      </TableCell>
                       <TableCell className="font-medium">{b.name}</TableCell>
                       <TableCell>
                         <Badge
                           variant={
                             b.origin === "domestic" ? "default" : "destructive"
                           }
+                          className="capitalize"
                         >
-                          {b.origin === "domestic"
-                            ? language === "hi"
-                              ? "घरेलू"
-                              : "domestic"
-                            : language === "hi"
-                              ? "आयातित"
-                              : "imported"}
+                          {b.origin}
                         </Badge>
                       </TableCell>
                       {whatIfMode && (
@@ -581,17 +597,13 @@ const BOMManagement = () => {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="domestic">
-                                {language === "hi" ? "घरेलू" : "Domestic"}
-                              </SelectItem>
-                              <SelectItem value="imported">
-                                {language === "hi" ? "आयातित" : "Imported"}
-                              </SelectItem>
+                              <SelectItem value="domestic">Domestic</SelectItem>
+                              <SelectItem value="imported">Imported</SelectItem>
                             </SelectContent>
                           </Select>
                         </TableCell>
                       )}
-                      <TableCell>{b.supplierName}</TableCell>
+                      <TableCell>{b.supplierName || "—"}</TableCell>
                       <TableCell>₹{b.cost.toLocaleString("en-IN")}</TableCell>
                       <TableCell>
                         {currentDva.totalCost > 0

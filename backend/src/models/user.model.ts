@@ -12,6 +12,7 @@ interface UserAttributes {
   // Add to UserAttributes interface
   resetPasswordToken?: string;
   resetPasswordExpires?: Date;
+  status: "active" | "inactive" | "suspended";
 }
 
 // 2. Define which attributes are optional during 'User.create()'
@@ -31,6 +32,7 @@ class UserModel
   public department?: string;
   public resetPasswordToken?: string;
   public resetPasswordExpires?: Date;
+  public status!: "active" | "inactive" | "suspended";
 }
 
 export function initUserModel(sequelize: Sequelize) {
@@ -80,6 +82,11 @@ export function initUserModel(sequelize: Sequelize) {
       resetPasswordExpires: {
         type: DataTypes.DATE,
         allowNull: true,
+      },
+      status: {
+        type: DataTypes.ENUM("active", "inactive", "suspended"),
+        allowNull: false,
+        defaultValue: "active",
       },
     },
     {

@@ -8,7 +8,7 @@
 # Contains private keys and certificates for your peers/orderers
 /network/organizations/peerOrganizations/
 /network/organizations/ordererOrganizations/
-
+/chaincode/vendor
 # 3. Generated Channel Artifacts
 # These blocks and transaction files are created dynamically during setup
 /network/channel-artifacts/

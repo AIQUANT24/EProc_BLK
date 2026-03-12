@@ -9,6 +9,8 @@ import userRoutes from "./routes/user.routes.js";
 import supplierRoutes from "./routes/supplier.routes.js";
 import productsRoutes from "./routes/products.routes.js";
 import componentRoutes from "./routes/component.routes.js";
+import "./enrollAdmin.js"; // Ensure admin is enrolled at server startup
+import complianceRoutes from "./routes/compliance.routes.js";
 
 export async function bootstrap(): Promise<void> {
   try {
@@ -66,6 +68,7 @@ export async function bootstrap(): Promise<void> {
   app.use("/api/suppliers", supplierRoutes);
   app.use("/api/products", productsRoutes);
   app.use("/api/components", componentRoutes);
+  app.use("/api/compliance", complianceRoutes);
 
   app.listen(config.PORT, () =>
     console.log(

@@ -28,7 +28,7 @@ PACKAGES = {
     "httpx": "0.28.1",
     
     # Image Processing
-    "Pillow": "10.1.0",
+    "Pillow": "11.1.0",
     
     # Web Scraping
     "beautifulsoup4": "4.14.3",

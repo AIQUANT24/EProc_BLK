@@ -8,7 +8,7 @@ class ExtractedTable(BaseModel):
     """Represents a table extracted from the document"""
     table_index: int
     headers: List[str] = []
-    rows: List[Union[Dict[str, Any], List[Any]]] = []  # ← Direct data, not wrapped in "data"
+    rows: List[Union[Dict[str, Any], List[Any]]] = [] 
     footer: Optional[Dict[str, str]] = None
 
 class Heading(BaseModel):
@@ -20,21 +20,15 @@ class Heading(BaseModel):
 
 
 
-
-
-
-from pydantic import BaseModel
-from typing import Dict, Any, List
-
 class SupplierResponse(BaseModel):
     supplier: str
-    component: Dict[str, str]  # "Component Name": "Total Value"
-    origin: str  # NEW: "imported" or "domestic"
-    percent_of_total: str  # NEW: "31.8%"
-    fraud_detected: bool  # NEW: True/False   
+    component: Dict[str, str]  
+    origin: str  
+    percent_of_total: str  
+    fraud_detected: bool   
     
 class ExtractionResponse(BaseModel):
-    data: List[SupplierResponse]  # ← NEW: Your array of supplier objects
+    data: List[SupplierResponse]  
     filename: str = ""
     processing_time: float = 0.0
     metadata: Dict[str, Any] = {}
@@ -42,7 +36,6 @@ class ExtractionResponse(BaseModel):
 
 
 
-# Keep these for backward compatibility if needed
 class BOMItem(BaseModel):
     """Legacy BOM item model - kept for compatibility"""
     seq_no: str = ""

@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 import sys
 import time
 import re
-import shutil  # Add this import
+import shutil  
 
 # Configure logger
 logger.remove()
@@ -171,19 +171,19 @@ class SarvamDocumentIntelligence:
             }
     
             try:
-                # ── Extract the ZIP into a temporary folder ───────────────
+                # Extract the ZIP into a temporary folder 
+                
                 extract_dir = output_dir / f"{base_name}_{timestamp}_extracted"
                 with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                     zip_ref.extractall(extract_dir)
                 logger.info(f"Extracted ZIP to: {extract_dir}")
     
-                # ── Discover HTML and Markdown files inside the ZIP ───────
+                # Discover HTML and Markdown files inside the ZIP 
+                
                 html_files = list(extract_dir.glob("**/*.html"))
                 md_files = list(extract_dir.glob("**/*.md"))
     
-                # ── Debug: Print and save raw HTML for manual inspection ──
-                # This helps you verify what Sarvam actually returned
-                # before any parsing happens. Remove this block in production.
+                
                 if html_files:
                     with open(html_files[0], 'r', encoding='utf-8') as f:
                         raw_html = f.read()
@@ -199,11 +199,12 @@ class SarvamDocumentIntelligence:
                         f.write(raw_html)
                     logger.info(f"Raw HTML saved for inspection: {debug_path}")
     
-                # ── Store paths of discovered files ───────────────────────
+                
                 extracted_data["html_files"] = [str(f) for f in html_files]
                 extracted_data["markdown_files"] = [str(f) for f in md_files]
     
-                # ── Convert the first HTML file to structured JSON ────────
+                # Convert the first HTML file to structured JSON
+                
                 if html_files:
                     json_output = self._convert_html_to_json(html_files[0])
                     if json_output:
@@ -213,11 +214,12 @@ class SarvamDocumentIntelligence:
                         extracted_data["json_representation"] = str(json_path)
                         logger.info(f"Structured JSON saved: {json_path}")
     
-                # ── Cleanup: Delete the temp extracted folder ─────────────
+                # Cleanup: Delete the temp extracted folder
                 shutil.rmtree(extract_dir)
                 logger.info(f"Deleted temporary folder: {extract_dir}")
     
-                # ── Cleanup: Delete the original ZIP file ─────────────────
+                #  Cleanup: Delete the original ZIP file
+                
                 zip_path.unlink()
                 logger.info(f"Deleted ZIP file: {zip_path}")
     
@@ -244,11 +246,11 @@ class SarvamDocumentIntelligence:
             with open(html_path, 'r', encoding='utf-8') as f:
                 soup = BeautifulSoup(f.read(), 'html.parser')
 
-            # Replace <br> with explicit newlines in raw text
+            
             for br in soup.find_all('br'):
                 br.replace_with('\\n')
 
-            # Internal container; we won't return all of this directly
+            
             flat_kv: dict = {}
 
             result = {
@@ -313,7 +315,7 @@ class SarvamDocumentIntelligence:
                         header = headers[col_idx] if col_idx < len(headers) else f"col_{col_idx+1}"
                         raw_value = cell.get_text(strip=True)
 
-                        # keep raw (with \n) separately if you ever need it
+                        
                         cleaned_value = re.sub(r'\\n+', ' ', raw_value).strip()
 
                         key = f"table_{table_count}_row_{row_num}_{header}"
@@ -411,7 +413,7 @@ class SarvamDocumentIntelligence:
 
             table_name = f"table_{table_idx_str}"
             tdata = tables.setdefault(table_name, {
-                "rows_raw": {},   # row_index -> {col_key: value}
+                "rows_raw": {},   
                 "footer_raw": {}
             })
 
@@ -440,26 +442,26 @@ class SarvamDocumentIntelligence:
             if not rows_raw:
                 continue
 
-            # 1) Build header_map from row_1 (table header row)
+            
             if 1 in rows_raw:
                 header_row = rows_raw[1]
                 header_map = {col_key: header_row[col_key] for col_key in header_row.keys()}
-                # remove header row from data rows
+                
                 rows_data = {idx: r for idx, r in rows_raw.items() if idx != 1}
             else:
-                # fallback: use column keys as labels
+                
                 first_idx = min(rows_raw.keys())
                 header_row = rows_raw[first_idx]
                 header_map = {col_key: col_key for col_key in header_row.keys()}
                 rows_data = rows_raw
 
-            # 2) Order column keys in a stable way
+            
             col_keys = list(header_map.keys())
 
-            # 3) Build headers list (labels only)
+            
             headers = [header_map[col_key] for col_key in col_keys]
 
-            # 4) Build row objects using those headers
+            #  Build row objects using those headers
             rows = []
             for row_idx in sorted(rows_data.keys()):
                 row_src = rows_data[row_idx]
@@ -469,7 +471,7 @@ class SarvamDocumentIntelligence:
                     row_obj[label] = row_src.get(col_key, "")
                 rows.append(row_obj)
 
-            # 5) Build footer mapped to same headers
+            #  Build footer mapped to same headers
             footer = {}
             if footer_raw:
                 for col_key in col_keys:

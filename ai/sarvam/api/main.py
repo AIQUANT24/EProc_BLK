@@ -6,10 +6,10 @@ import uvicorn
 from pathlib import Path
 import sys
 
-# Add parent directory to path for imports
+
 sys.path.append(str(Path(__file__).parent.parent))
 
-# Change from relative import to absolute import
+
 from api.routes import router
 from api.models import ErrorResponse
 
@@ -25,7 +25,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, specify allowed origins
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

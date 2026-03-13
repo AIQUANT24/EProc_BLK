@@ -46,11 +46,20 @@ const SECTORS = [
   "Metallurgy",
 ];
 
-// Helper to clean currency strings from the AI (e.g. "$1,750.00" -> 1750)
+// Helper to clean currency strings from the AI
 const parseCurrency = (val: string | number) => {
   if (typeof val === "number") return val;
   const cleaned = val.replace(/[^0-9.-]+/g, "");
   return parseFloat(cleaned) || 0;
+};
+
+// Helper to generate a SHA-256 hash of the BOM data for the Blockchain
+const generateBOMHash = async (componentsData: any) => {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(JSON.stringify(componentsData));
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 };
 
 interface EditableComponent {
@@ -102,7 +111,6 @@ const NewProduct = () => {
 
       const extractedData = aiResponse.data.data;
 
-      // Map the AI's nested structure into a flat, editable array for the UI
       const editableItems: EditableComponent[] = extractedData.map(
         (item: any) => {
           const compName = Object.keys(item.component)[0];
@@ -124,7 +132,7 @@ const NewProduct = () => {
       toast.success("Data extracted! Please review and confirm.", {
         id: "ai-toast",
       });
-      setStep(2); // Move to review step
+      setStep(2);
     } catch (err: any) {
       toast.error(
         err.response?.data?.detail ||
@@ -164,22 +172,20 @@ const NewProduct = () => {
     ]);
   };
 
-  // --- STEP 2: FINAL SUBMIT TO DB ---
+  // --- STEP 2: FINAL SUBMIT TO DB, STORAGE, AND BLOCKCHAIN ---
   const handleFinalSubmit = async () => {
     setSaving(true);
     try {
-      // 1. Recalculate totals based on user edits
       const totalCost = components.reduce((sum, c) => sum + Number(c.cost), 0);
       const domesticCost = components
         .filter((c) => c.origin === "domestic")
         .reduce((sum, c) => sum + Number(c.cost), 0);
       const dvaScore = totalCost > 0 ? (domesticCost / totalCost) * 100 : 0;
 
-      // 2. Repackage data into the structure your Node.js Controller expects
       const reconstructedOcrData = {
         data: components.map((c) => ({
           supplier: c.supplierName,
-          component: { [c.name]: c.cost.toString() }, // DB expects { "itemName": "price" }
+          component: { [c.name]: c.cost.toString() },
           origin: c.origin,
           percent_of_total:
             totalCost > 0
@@ -193,7 +199,7 @@ const NewProduct = () => {
         },
       };
 
-      // 3. Send to Node Database
+      // 1. Send structured data to MySQL Database
       const response = await axios.post(
         `${API_URL}/products`,
         {
@@ -205,6 +211,55 @@ const NewProduct = () => {
       );
 
       if (response.data?.success) {
+        const newProductId = response.data.product.id;
+        const supplierId = response.data.product.supplierId;
+
+        // 2. Upload the physical BOM file to the database
+        if (file) {
+          const fileFormData = new FormData();
+          fileFormData.append("file", file);
+          fileFormData.append("productId", newProductId);
+
+          try {
+            await axios.post(`${API_URL}/files/upload`, fileFormData, {
+              withCredentials: true,
+              headers: { "Content-Type": "multipart/form-data" },
+            });
+          } catch (fileErr) {
+            console.error("Document upload failed", fileErr);
+            toast.warning("Product saved, but document upload failed.");
+          }
+        }
+
+        // 3. Anchor Compliance Record to Hyperledger Fabric
+        try {
+          toast.loading("Anchoring compliance record to blockchain...", {
+            id: "ledger",
+          });
+
+          const bomHash = await generateBOMHash(reconstructedOcrData);
+
+          await axios.post(
+            `${API_URL}/compliance/product`, // Adjust this route if your compliance router is mounted differently
+            {
+              supplierId,
+              productId: newProductId,
+              bomHash,
+              dva: dvaScore,
+            },
+            { withCredentials: true },
+          );
+
+          toast.success("Compliance record anchored to blockchain securely!", {
+            id: "ledger",
+          });
+        } catch (bcErr) {
+          console.error("Blockchain error", bcErr);
+          toast.error("Database saved, but failed to anchor to blockchain.", {
+            id: "ledger",
+          });
+        }
+
         toast.success(`Success! Final DVA Score: ${dvaScore.toFixed(1)}%`);
         navigate("/products");
       }
@@ -343,7 +398,6 @@ const NewProduct = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-6 space-y-4">
-            {/* Editable Grid Header */}
             <div className="hidden md:grid grid-cols-12 gap-4 px-2 text-sm font-semibold text-muted-foreground">
               <div className="col-span-3">Component Name</div>
               <div className="col-span-3">Manufacturer / Supplier</div>
@@ -352,7 +406,6 @@ const NewProduct = () => {
               <div className="col-span-1 text-center">Action</div>
             </div>
 
-            {/* Editable Rows */}
             {components.map((comp, index) => (
               <div
                 key={comp.id}
@@ -398,7 +451,7 @@ const NewProduct = () => {
                   <Input
                     type="number"
                     min="0"
-                    value={comp.cost}
+                    value={comp.cost === 0 ? "" : comp.cost}
                     onChange={(e) =>
                       updateComponent(index, "cost", e.target.value)
                     }
@@ -439,7 +492,7 @@ const NewProduct = () => {
               ) : (
                 <Save className="mr-2 h-5 w-5" />
               )}
-              {saving ? "Saving to Database..." : "Confirm & Submit Product"}
+              {saving ? "Processing Records..." : "Confirm & Submit Product"}
             </Button>
           </CardContent>
         </Card>

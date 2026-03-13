@@ -10,9 +10,10 @@ interface ComponentAttributes {
   percentage: number;
 }
 
+// FIX: Added "percentage" to Optional so TS doesn't yell if it's missing during creation
 interface ComponentCreationAttributes extends Optional<
   ComponentAttributes,
-  "id"
+  "id" | "percentage"
 > {}
 
 export default class Component
@@ -30,11 +31,10 @@ export default class Component
   // Association Helper
   static associate(models: any) {
     Component.belongsTo(models.Product, {
-      foreignKey: "productId", // Use the TS property name here
+      foreignKey: "productId",
       as: "product",
     });
 
-    // It's also good to link to the supplier of the component
     Component.belongsTo(models.Supplier, {
       foreignKey: "supplierId",
       as: "componentSupplier",
@@ -61,7 +61,6 @@ export function initComponentModel(sequelize: Sequelize) {
       cost: {
         type: DataTypes.DECIMAL(15, 2),
         allowNull: false,
-        // Getter to ensure DECIMAL (string in DB) is returned as a number in JS
         get() {
           const value = this.getDataValue("cost");
           return value ? parseFloat(value.toString()) : 0;
@@ -70,17 +69,17 @@ export function initComponentModel(sequelize: Sequelize) {
       productId: {
         type: DataTypes.UUID,
         allowNull: false,
-        field: "product_id", // Explicit mapping
+        field: "product_id",
       },
       supplierId: {
         type: DataTypes.UUID,
         allowNull: false,
-        field: "supplier_id", // Explicit mapping
+        field: "supplier_id",
       },
       percentage: {
         type: DataTypes.DECIMAL(5, 2),
         allowNull: false,
-        // Getter to ensure DECIMAL (string in DB) is returned as a number in JS
+        defaultValue: 0, // FIX: Added default value for MySQL
         get() {
           const value = this.getDataValue("percentage");
           return value ? parseFloat(value.toString()) : 0;

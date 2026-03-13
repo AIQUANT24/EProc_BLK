@@ -1,6 +1,6 @@
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 // Define these once at the top
 // const __filename = fileURLToPath(import.meta.url);
@@ -24,28 +24,29 @@ export interface ConnectionProfile {
 
 export const getCCP = (): ConnectionProfile => {
   const ccpPath = path.resolve(
-    // '/home/gaurav-raj/fabric/fabric-samples/test-network/organizations/peerOrganizations/org1.example.com/connection-org1.json'
-    "/home/gaurav-raj/project_ibc/EProc_BLK/hyperledger/network/organizations/peerOrganizations/org1.example.com/connection-org1.json"
+    "/home/rayan-ahmad/Desktop/nicov/hyperledger/network/organizations/peerOrganizations/org1.example.com/connection-org1.json",
   );
-  
+
   try {
-    const ccpContent = fs.readFileSync(ccpPath, 'utf8');
+    const ccpContent = fs.readFileSync(ccpPath, "utf8");
     return JSON.parse(ccpContent);
   } catch (error) {
-    console.error('Failed to read connection profile:', error);
+    console.error("Failed to read connection profile:", error);
     throw new Error(`Could not load connection profile from ${ccpPath}`);
   }
 };
 
 export const getCaInfo = (ccp: ConnectionProfile): CertificateAuthority => {
-  const caInfo = ccp.certificateAuthorities['ca.org1.example.com'];
-  
+  const caInfo = ccp.certificateAuthorities["ca.org1.example.com"];
+
   if (!caInfo) {
-    throw new Error('Certificate authority "ca.org1.example.com" not found in connection profile');
+    throw new Error(
+      'Certificate authority "ca.org1.example.com" not found in connection profile',
+    );
   }
-  
+
   return {
     url: caInfo.url,
-    caName: 'ca.org1.example.com'
+    caName: "ca.org1.example.com",
   };
 };

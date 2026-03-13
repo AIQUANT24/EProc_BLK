@@ -1,15 +1,22 @@
 import { Request, Response } from "express";
-import { sequelize } from "../config/db.js";
+import { sequelize } from "../config/db.js"; // Ensure .js extension if using ES modules
 import Product from "../models/product.model.js";
 import Supplier from "../models/supplier.model.js";
 import Component from "../models/component.model.js";
 
-// Helper functions to clean OCR strings
-const parseCurrency = (val: string) =>
-  parseFloat(val.replace(/[^0-9.-]+/g, ""));
-const parsePercentage = (val: string) => parseFloat(val.replace("%", ""));
+// Helper functions to clean strings into strict numbers
+const parseCurrency = (val: string | number) => {
+  if (typeof val === "number") return val;
+  return parseFloat(val.replace(/[^0-9.-]+/g, "")) || 0;
+};
+
+const parsePercentage = (val: string | number) => {
+  if (typeof val === "number") return val;
+  return parseFloat(val.replace("%", "")) || 0;
+};
 
 export const productController = {
+  // --- CREATE PRODUCT & BULK INSERT COMPONENTS ---
   createProductWithBOM: async (req: Request, res: Response) => {
     // We use a transaction so if a component fails to save, the product isn't created empty
     const t = await sequelize.transaction();
@@ -46,7 +53,7 @@ export const productController = {
           estimatedCost: totalCost,
           dvaScore: dvaScore,
           classification,
-          status: "under_review", // It has a BOM now, so it goes to review!
+          status: "under_review", // Going straight to review since it's verified by human-in-the-loop
         },
         { transaction: t },
       );
@@ -59,11 +66,12 @@ export const productController = {
 
         return {
           productId: newProduct.id,
-          supplierId: supplier.id, // Linking to the main supplier who uploaded it
-          name: `${componentName} (Mfr: ${item.supplier})`, // Storing the OCR supplier name here temporarily
+          supplierId: supplier.id,
+          name: item.supplier
+            ? `${componentName} (Mfr: ${item.supplier})`
+            : componentName,
           origin: item.origin,
           cost: componentCost,
-          percentage: parsePercentage(item.percent_of_total),
         };
       });
 
@@ -76,13 +84,15 @@ export const productController = {
       // Commit the transaction
       await t.commit();
 
+      // Insert into the hyperledger as well
+
       return res.status(201).json({
         success: true,
         message: "Product and BOM processed successfully",
         product: newProduct,
       });
     } catch (error: any) {
-      // If anything fails, rollback the database
+      // If anything fails, rollback the database to prevent orphaned data
       await t.rollback();
       console.error("BOM Processing Error:", error);
       return res
@@ -91,6 +101,7 @@ export const productController = {
     }
   },
 
+  // --- FETCH ALL PRODUCTS ---
   getProducts: async (req: Request, res: Response) => {
     try {
       const userId = req.user?.id;
@@ -104,7 +115,6 @@ export const productController = {
           where: { user_id: userId },
         });
 
-        // If they haven't set up a profile yet, they inherently have 0 products
         if (!supplier) {
           return res.status(200).json({
             success: true,
@@ -116,24 +126,23 @@ export const productController = {
 
         // 2. Fetch only the products belonging to this specific supplier
         products = await Product.findAll({
-          where: { supplierId: supplier.id }, // Uses the model's property name
-          order: [["createdAt", "DESC"]], // Newest products first
+          where: { supplierId: supplier.id },
+          order: [["createdAt", "DESC"]],
         });
       } else {
-        // 3. For Admins, Procurement, and Auditors: Fetch ALL products
+        // 3. For Admins/Procurement: Fetch ALL products
         products = await Product.findAll({
           order: [["createdAt", "DESC"]],
           include: [
             {
               model: Supplier,
               as: "supplier",
-              attributes: ["id", "gst", "sector"], // Fetch limited supplier details for the admin view
+              attributes: ["id", "gst", "sector"],
             },
           ],
         });
       }
 
-      // 4. Send the formatted response back to the React UI
       return res.status(200).json({
         success: true,
         products,
@@ -146,6 +155,50 @@ export const productController = {
         message: "Failed to fetch products",
         error: error.message,
       });
+    }
+  },
+
+  // --- LOCK A PRODUCT FOR REVIEW ---
+  submitBOM: async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      const supplier = await Supplier.findOne({
+        where: { user_id: req.user?.id },
+      });
+      if (!supplier)
+        return res
+          .status(403)
+          .json({ success: false, message: "Unauthorized" });
+
+      const product = await Product.findOne({
+        where: { id, supplierId: supplier.id },
+      });
+      if (!product)
+        return res
+          .status(404)
+          .json({ success: false, message: "Product not found" });
+
+      if (product.status !== "draft") {
+        return res.status(400).json({
+          success: false,
+          message: "Product is already submitted or verified.",
+        });
+      }
+
+      product.status = "under_review";
+      await product.save();
+
+      return res.status(200).json({
+        success: true,
+        message: "BOM submitted successfully",
+        product,
+      });
+    } catch (error: any) {
+      console.error("Submit BOM Error:", error);
+      return res
+        .status(500)
+        .json({ success: false, message: "Failed to submit BOM" });
     }
   },
 };

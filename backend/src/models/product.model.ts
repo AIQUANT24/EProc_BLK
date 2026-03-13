@@ -12,7 +12,6 @@ interface ProductAttributes {
   status: "draft" | "active" | "archived" | "under_review" | "verified";
   confidence: number | null;
   risk: number | null;
-  blockchainTxHash: string | null;
 }
 
 // 2. Optional attributes during .create()
@@ -26,7 +25,6 @@ interface ProductCreationAttributes extends Optional<
   | "status"
   | "confidence"
   | "risk"
-  | "blockchainTxHash"
 > {}
 
 export default class Product
@@ -43,7 +41,6 @@ export default class Product
   public status!: "draft" | "active" | "archived" | "under_review" | "verified";
   public confidence!: number | null;
   public risk!: number | null;
-  public blockchainTxHash!: string | null;
 
   // Associations
   static associate(models: any) {
@@ -134,10 +131,6 @@ export function initProductModel(sequelize: Sequelize) {
           const value = this.getDataValue("risk");
           return value ? parseFloat(value.toString()) : null;
         },
-      },
-      blockchainTxHash: {
-        type: DataTypes.STRING,
-        allowNull: true,
       },
     },
     {

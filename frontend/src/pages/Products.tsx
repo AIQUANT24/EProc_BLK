@@ -8,7 +8,13 @@ import { Badge } from "@/components/ui/badge";
 import { DataTable, type Column } from "@/components/shared/DataTable";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Plus, Loader2, ListTree } from "lucide-react";
+import { Plus, Loader2, ListTree, FileSearch, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 
 const API_URL = import.meta.env.VITE_API_URL;
@@ -31,12 +37,16 @@ const Products = () => {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // File Viewer State
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [fileLoading, setFileLoading] = useState(false);
+  const [currentProductName, setCurrentProductName] = useState("");
+
   const isSupplier = user?.role === "supplier";
 
   const [dashboardData, setDashboardData] = useState({
     supplierProfile: null as any,
-    products: [] as any[],
-    compliance: [] as any[],
   });
 
   const fetchDashboardData = useCallback(async () => {
@@ -44,25 +54,15 @@ const Products = () => {
       const response = await axios.get(`${API_URL}/suppliers/profile`, {
         withCredentials: true,
       });
-
       if (response.data?.success) {
-        setDashboardData((prev) => ({
-          ...prev,
-          supplierProfile: response.data.supplier,
-        }));
+        setDashboardData({ supplierProfile: response.data.supplier });
       }
     } catch (error: any) {
       if (error.response?.status === 404) {
-        setDashboardData((prev) => ({ ...prev, supplierProfile: null }));
+        setDashboardData({ supplierProfile: null });
       }
     }
   }, []);
-
-  useEffect(() => {
-    if (user) fetchDashboardData();
-  }, [fetchDashboardData, user]);
-
-  const isProfileComplete = !!dashboardData.supplierProfile;
 
   const fetchProducts = useCallback(async () => {
     try {
@@ -82,8 +82,54 @@ const Products = () => {
   }, []);
 
   useEffect(() => {
+    if (user) fetchDashboardData();
     fetchProducts();
-  }, [fetchProducts]);
+  }, [user, fetchDashboardData, fetchProducts]);
+
+  const isProfileComplete = !!dashboardData.supplierProfile;
+
+  // --- FILE VIEWER HANDLER ---
+  const handleViewFile = async (productId: string, productName: string) => {
+    setViewerOpen(true);
+    setFileLoading(true);
+    setCurrentProductName(productName);
+    setFileUrl(null);
+
+    try {
+      // Fetch the file as a Blob (Binary Data)
+      const response = await axios.get(
+        `${API_URL}/files/product/${productId}`,
+        {
+          withCredentials: true,
+          responseType: "blob", // CRITICAL for handling files in Axios
+        },
+      );
+
+      // Convert the Blob into a readable Object URL for the browser
+      const url = URL.createObjectURL(
+        new Blob([response.data], { type: response.headers["content-type"] }),
+      );
+      setFileUrl(url);
+    } catch (error: any) {
+      setViewerOpen(false);
+      if (error.response?.status === 404) {
+        toast.warning("No document found for this product.");
+      } else {
+        toast.error("Failed to load document.");
+      }
+    } finally {
+      setFileLoading(false);
+    }
+  };
+
+  // Clean up Object URLs to prevent memory leaks
+  const handleCloseViewer = () => {
+    setViewerOpen(false);
+    if (fileUrl) {
+      URL.revokeObjectURL(fileUrl);
+      setFileUrl(null);
+    }
+  };
 
   const columns: Column<Product>[] = [
     {
@@ -174,19 +220,32 @@ const Products = () => {
         );
       },
     },
-    // NEW: Actions Column linking to the BOM Page
     {
       key: "actions" as any,
       label: "Actions",
       render: (r) => (
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => navigate(`/bom/${r.id}`)}
-          className="gap-2"
-        >
-          <ListTree className="h-4 w-4" /> Manage BOM
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* View Document Button */}
+          <Button
+            size="sm"
+            variant="ghost"
+            title="View Original Document"
+            onClick={() => handleViewFile(r.id, r.name)}
+            className="text-muted-foreground hover:text-primary px-2"
+          >
+            <FileSearch className="h-4 w-4" />
+          </Button>
+
+          {/* Manage BOM Button */}
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => navigate(`/bom/${r.id}`)}
+            className="gap-2 text-xs"
+          >
+            <ListTree className="h-3 w-3" /> Manage BOM
+          </Button>
+        </div>
       ),
     },
   ];
@@ -232,6 +291,57 @@ const Products = () => {
           />
         </CardContent>
       </Card>
+
+      {/* --- DOCUMENT VIEWER MODAL --- */}
+      <Dialog
+        open={viewerOpen}
+        onOpenChange={(open) => !open && handleCloseViewer()}
+      >
+        <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0 overflow-hidden bg-muted/30 border-muted">
+          {/* Custom Header to allow full height iframe */}
+          <div className="flex items-center justify-between px-4 py-3 bg-white border-b shadow-sm z-10">
+            <div>
+              <DialogTitle className="text-lg flex items-center gap-2">
+                <FileSearch className="h-5 w-5 text-primary" />
+                BOM Document
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground">
+                {currentProductName}
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleCloseViewer}
+              className="rounded-full"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+
+          {/* Viewer Area */}
+          <div className="flex-1 w-full bg-black/5 relative overflow-hidden flex items-center justify-center">
+            {fileLoading ? (
+              <div className="flex flex-col items-center gap-3">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm font-medium text-muted-foreground">
+                  Retrieving document...
+                </p>
+              </div>
+            ) : fileUrl ? (
+              <iframe
+                src={fileUrl}
+                className="w-full h-full border-0 bg-white"
+                title="BOM Document Viewer"
+              />
+            ) : (
+              <p className="text-muted-foreground">
+                Document could not be loaded.
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

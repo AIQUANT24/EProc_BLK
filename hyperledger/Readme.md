@@ -76,3 +76,9 @@ cd network
 ```bash
 ./network.sh up createChannel -c mychannel
 ```
+
+- **Deploy a chaincode:**
+
+```bash
+./network.sh deployCC -ccn basic -ccp /home/$USER/Desktop/nicov/hyperledger/chaincode/compliance -ccl go
+```

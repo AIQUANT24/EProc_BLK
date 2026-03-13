@@ -1,4 +1,5 @@
-import { useMockData } from "@/contexts/MockDataContext";
+import { useState, useEffect, useCallback } from "react";
+import axios from "axios";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,8 +11,7 @@ import {
   AlertTriangle,
   Activity,
   TrendingUp,
-  Users,
-  FileText,
+  Loader2,
 } from "lucide-react";
 import {
   BarChart,
@@ -25,53 +25,135 @@ import {
   Pie,
   Cell,
 } from "recharts";
+import { toast } from "sonner";
 
+const API_URL = import.meta.env.VITE_API_URL;
 const PIE_COLORS = ["hsl(162,72%,45%)", "hsl(262,83%,58%)", "hsl(0,84%,60%)"];
 
-const AdminDashboard = () => {
-  // Note: Once you integrate your backend, these will come from
-  // an API call/TanStack Query rather than useMockData.
-  const {
-    suppliers,
-    products,
-    compliance,
-    alerts,
-    verificationLogs,
-    users,
-    ledger,
-  } = useMockData();
+interface AdminProduct {
+  id: string;
+  name: string;
+  dvaScore: number | null;
+  classification: string | null;
+  status:
+    | "draft"
+    | "under_review"
+    | "verified"
+    | "active"
+    | "archived"
+    | "non-compliant";
+  risk: number | null;
+  supplier?: {
+    gst: string;
+    user?: {
+      fullName: string;
+    };
+  };
+}
 
+interface AdminSupplier {
+  id: string;
+  state: string;
+}
+
+const AdminDashboard = () => {
+  const [products, setProducts] = useState<AdminProduct[]>([]);
+  const [suppliers, setSuppliers] = useState<AdminSupplier[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      setLoading(true);
+      // Fetch both products and suppliers concurrently
+      const [prodRes, suppRes] = await Promise.all([
+        axios
+          .get(`${API_URL}/products`, { withCredentials: true })
+          .catch((e) => e.response),
+        axios
+          .get(`${API_URL}/suppliers`, { withCredentials: true })
+          .catch((e) => e.response),
+      ]);
+
+      if (prodRes?.data?.success) {
+        // Filter out drafts for admin view
+        setProducts(
+          prodRes.data.products.filter(
+            (p: AdminProduct) => p.status !== "draft",
+          ),
+        );
+      }
+
+      if (suppRes?.data?.success) {
+        setSuppliers(suppRes.data.suppliers);
+      }
+    } catch (error) {
+      toast.error("Failed to load dashboard data");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  // --- Dynamic KPI Calculations ---
+  const submittedProducts = products.filter((p) => p.status !== "draft");
+  const compliantProducts = submittedProducts.filter((c) =>
+    ["verified", "compliant", "active"].includes(c.status),
+  );
+
+  const complianceRate =
+    submittedProducts.length > 0
+      ? ((compliantProducts.length / submittedProducts.length) * 100).toFixed(0)
+      : "0";
+
+  // Identify products where AI risk > 40%
+  const highRiskAlerts = submittedProducts
+    .filter((p) => p.risk !== null && p.risk > 40)
+    .sort((a, b) => (b.risk || 0) - (a.risk || 0));
+
+  // --- Chart Data Preparation ---
   const classDistribution = [
     {
       name: "Class I",
-      value: compliance.filter((c) => c.classification === "Class I").length,
+      value: submittedProducts.filter((c) => c.classification === "Class I")
+        .length,
     },
     {
       name: "Class II",
-      value: compliance.filter((c) => c.classification === "Class II").length,
+      value: submittedProducts.filter((c) => c.classification === "Class II")
+        .length,
     },
     {
       name: "Non-Local",
-      value: compliance.filter((c) => c.classification === "Non-Local").length,
+      value: submittedProducts.filter(
+        (c) => c.classification === "Non-Local" || !c.classification,
+      ).length,
     },
   ];
 
-  const dvaData = compliance.slice(0, 10).map((c) => ({
-    name:
-      c.productName.length > 12
-        ? c.productName.slice(0, 12) + "…"
-        : c.productName,
-    dva: c.dvaScore,
-  }));
+  const dvaData = [...submittedProducts]
+    .filter((p) => p.dvaScore !== null)
+    .sort((a, b) => (b.dvaScore || 0) - (a.dvaScore || 0)) // Top scores first
+    .slice(0, 10)
+    .map((c) => ({
+      name: c.name.length > 12 ? c.name.slice(0, 12) + "…" : c.name,
+      dva: Number(c.dvaScore),
+    }));
 
-  const complianceRate =
-    compliance.length > 0
-      ? (
-          (compliance.filter((c) => c.status === "compliant").length /
-            compliance.length) *
-          100
-        ).toFixed(0)
-      : "0";
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <p className="text-muted-foreground animate-pulse">
+            Aggregating national data...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in space-y-8">
@@ -86,50 +168,32 @@ const AdminDashboard = () => {
           title="Total Suppliers"
           value={suppliers.length}
           icon={<Building2 className="h-6 w-6" />}
-          trend={{ value: 12, positive: true }}
+          subtitle={`Across ${new Set(suppliers.map((s) => s.state)).size} states`}
         />
         <StatCard
-          title="Products Registered"
-          value={products.length}
+          title="Products Submitted"
+          value={submittedProducts.length}
           icon={<Package className="h-6 w-6" />}
-          trend={{ value: 8, positive: true }}
         />
         <StatCard
           title="Compliance Rate"
           value={`${complianceRate}%`}
           icon={<ShieldCheck className="h-6 w-6" />}
-          subtitle={`${compliance.filter((c) => c.status === "compliant").length} of ${compliance.length} compliant`}
+          subtitle={`${compliantProducts.length} of ${submittedProducts.length} compliant`}
         />
         <StatCard
-          title="Active Alerts"
-          value={alerts.filter((a) => !a.resolved).length}
-          icon={<AlertTriangle className="h-6 w-6" />}
-          trend={{ value: 15, positive: false }}
-        />
-      </div>
-
-      {/* Secondary Meta Stats Row */}
-      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard
-          title="Platform Users"
-          value={users.length}
-          icon={<Users className="h-6 w-6" />}
-          subtitle={`${users.filter((u) => u.status === "active").length} active now`}
-        />
-        <StatCard
-          title="Verifications"
-          value={verificationLogs.length}
-          icon={<ShieldCheck className="h-6 w-6" />}
-        />
-        <StatCard
-          title="Ledger Entries"
-          value={ledger.length}
-          icon={<FileText className="h-6 w-6" />}
-        />
-        <StatCard
-          title="States Covered"
-          value={new Set(suppliers.map((s) => s.state)).size}
-          icon={<Building2 className="h-6 w-6" />}
+          title="AI Risk Alerts"
+          value={highRiskAlerts.length}
+          icon={
+            <AlertTriangle
+              className={
+                highRiskAlerts.length > 0
+                  ? "h-6 w-6 text-destructive"
+                  : "h-6 w-6"
+              }
+            />
+          }
+          subtitle="Products with >40% risk score"
         />
       </div>
 
@@ -143,37 +207,50 @@ const AdminDashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={280}>
-              <BarChart data={dvaData}>
-                <CartesianGrid
-                  strokeDasharray="3 3"
-                  stroke="hsl(var(--border))"
-                  vertical={false}
-                />
-                <XAxis
-                  dataKey="name"
-                  tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }}
-                  angle={-15}
-                  textAnchor="end"
-                  height={50}
-                />
-                <YAxis
-                  domain={[0, 100]}
-                  tick={{ fontSize: 12, fill: "hsl(var(--muted-foreground))" }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    borderRadius: "8px",
-                    border: "1px solid hsl(var(--border))",
-                  }}
-                />
-                <Bar
-                  dataKey="dva"
-                  fill="hsl(var(--primary))"
-                  radius={[4, 4, 0, 0]}
-                />
-              </BarChart>
-            </ResponsiveContainer>
+            {dvaData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={dvaData}>
+                  <CartesianGrid
+                    strokeDasharray="3 3"
+                    stroke="hsl(var(--border))"
+                    vertical={false}
+                  />
+                  <XAxis
+                    dataKey="name"
+                    tick={{
+                      fontSize: 10,
+                      fill: "hsl(var(--muted-foreground))",
+                    }}
+                    angle={-15}
+                    textAnchor="end"
+                    height={50}
+                  />
+                  <YAxis
+                    domain={[0, 100]}
+                    tick={{
+                      fontSize: 12,
+                      fill: "hsl(var(--muted-foreground))",
+                    }}
+                  />
+                  <Tooltip
+                    cursor={{ fill: "transparent" }}
+                    contentStyle={{
+                      borderRadius: "8px",
+                      border: "1px solid hsl(var(--border))",
+                    }}
+                  />
+                  <Bar
+                    dataKey="dva"
+                    fill="hsl(var(--primary))"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+                No data available
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -185,41 +262,52 @@ const AdminDashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie
-                  data={classDistribution}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={80}
-                  paddingAngle={5}
-                  dataKey="value"
-                >
-                  {classDistribution.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="mt-6 space-y-2">
-              {classDistribution.map((d, i) => (
-                <div
-                  key={d.name}
-                  className="flex items-center justify-between text-sm"
-                >
-                  <div className="flex items-center gap-2">
+            {submittedProducts.length > 0 ? (
+              <>
+                <ResponsiveContainer width="100%" height={200}>
+                  <PieChart>
+                    <Pie
+                      data={classDistribution}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={60}
+                      outerRadius={80}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {classDistribution.map((_, i) => (
+                        <Cell
+                          key={i}
+                          fill={PIE_COLORS[i % PIE_COLORS.length]}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip cursor={{ fill: "transparent" }} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="mt-6 space-y-2">
+                  {classDistribution.map((d, i) => (
                     <div
-                      className="h-3 w-3 rounded-full"
-                      style={{ background: PIE_COLORS[i] }}
-                    />
-                    <span className="text-muted-foreground">{d.name}</span>
-                  </div>
-                  <span className="font-semibold">{d.value}</span>
+                      key={d.name}
+                      className="flex items-center justify-between text-sm"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="h-3 w-3 rounded-full"
+                          style={{ background: PIE_COLORS[i] }}
+                        />
+                        <span className="text-muted-foreground">{d.name}</span>
+                      </div>
+                      <span className="font-semibold">{d.value}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </>
+            ) : (
+              <div className="h-[200px] flex items-center justify-center text-muted-foreground">
+                No data available
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -227,57 +315,59 @@ const AdminDashboard = () => {
       {/* Risks/Alerts Section */}
       <Card className="border-border/50 shadow-sm">
         <CardHeader>
-          <CardTitle className="font-display">Recent Risk Alerts</CardTitle>
+          <CardTitle className="font-display flex items-center gap-2">
+            <AlertTriangle className="h-5 w-5 text-destructive" />
+            AI Detected Risk Alerts
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid gap-3">
-            {alerts.slice(0, 5).map((a) => (
-              <div
-                key={a.id}
-                className="flex items-center justify-between rounded-lg border border-border/50 p-4 transition-colors hover:bg-muted/30"
-              >
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`p-2 rounded-full ${
-                      a.severity === "high"
-                        ? "bg-destructive/10"
-                        : "bg-warning/10"
-                    }`}
-                  >
-                    <AlertTriangle
-                      className={`h-4 w-4 ${
-                        a.severity === "high"
-                          ? "text-destructive"
-                          : "text-warning"
-                      }`}
-                    />
+            {highRiskAlerts.length > 0 ? (
+              highRiskAlerts.slice(0, 5).map((p) => (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 p-4 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-full bg-destructive/10">
+                      <AlertTriangle className="h-4 w-4 text-destructive" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold">{p.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Supplier:{" "}
+                        {p.supplier?.user?.fullName ||
+                          p.supplier?.gst ||
+                          "Unknown"}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold">{a.productName}</p>
-                    <p className="text-xs text-muted-foreground line-clamp-1">
-                      {a.description}
-                    </p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Badge
-                    variant={
-                      a.severity === "high" ? "destructive" : "secondary"
-                    }
-                  >
-                    {a.severity.toUpperCase()}
-                  </Badge>
-                  {a.resolved && (
+                  <div className="flex items-center gap-3">
+                    <div className="text-right">
+                      <p className="text-xs font-medium text-destructive">
+                        AI Risk Score
+                      </p>
+                      <p className="text-sm font-bold text-destructive">
+                        {p.risk}%
+                      </p>
+                    </div>
                     <Badge
                       variant="outline"
-                      className="text-green-600 border-green-200 bg-green-50"
+                      className="text-destructive border-destructive/50 bg-white"
                     >
-                      Resolved
+                      Action Required
                     </Badge>
-                  )}
+                  </div>
                 </div>
+              ))
+            ) : (
+              <div className="py-8 text-center border-2 border-dashed rounded-lg border-border">
+                <ShieldCheck className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-muted-foreground text-sm">
+                  No high-risk anomalies detected by AI currently.
+                </p>
               </div>
-            ))}
+            )}
           </div>
         </CardContent>
       </Card>

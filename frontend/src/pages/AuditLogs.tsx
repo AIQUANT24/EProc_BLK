@@ -1,42 +1,196 @@
-import { useMockData } from "@/contexts/MockDataContext";
-import { useLanguage } from "@/contexts/LanguageContext";
+import { useState, useEffect, useCallback } from "react";
+import axios from "axios";
 import PageHeader from "@/components/shared/PageHeader";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DataTable, type Column } from "@/components/shared/DataTable";
-import { Link2, Blocks } from "lucide-react";
+import { ShieldAlert, Database, FileClock, Loader2, Link2 } from "lucide-react";
 import StatCard from "@/components/shared/StatCard";
-import type { LedgerEntry } from "@/lib/blockchain-sim";
+import { toast } from "sonner";
+
+const API_URL = import.meta.env.VITE_API_URL;
+
+interface AuditLogDB {
+  id: string;
+  event: string;
+  entity: string;
+  entityId: string | null;
+  createdAt: string;
+  details: any;
+  user?: {
+    fullName: string;
+    email: string;
+  };
+}
 
 const AuditLogs = () => {
-  const { ledger } = useMockData();
-  const { t, language } = useLanguage();
+  const [logs, setLogs] = useState<AuditLogDB[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const columns: Column<LedgerEntry>[] = [
-    { key: "blockNumber", label: language === "hi" ? "ब्लॉक #" : "Block #", sortable: true, render: r => <span className="font-mono text-xs font-bold">#{r.blockNumber}</span> },
-    { key: "event", label: language === "hi" ? "घटना" : "Event", sortable: true, render: r => <Badge variant="outline">{r.event}</Badge> },
-    { key: "entity", label: language === "hi" ? "इकाई" : "Entity", render: r => <span className="font-mono text-xs">{r.entity}</span> },
-    { key: "user", label: language === "hi" ? "उपयोगकर्ता/सिस्टम" : "User/System", sortable: true },
-    { key: "txHash", label: "Tx Hash", render: r => <span className="font-mono text-xs flex items-center gap-1"><Link2 className="h-3 w-3 text-primary" />{r.txHash}</span> },
-    { key: "dataHash", label: "Data Hash", render: r => <span className="font-mono text-xs text-muted-foreground">{r.dataHash}</span> },
-    { key: "previousHash", label: "Prev Hash", render: r => <span className="font-mono text-xs text-muted-foreground">{r.previousHash}</span> },
-    { key: "timestamp", label: language === "hi" ? "समय" : "Timestamp", sortable: true, render: r => <span className="text-xs text-muted-foreground">{new Date(r.timestamp).toLocaleString()}</span> },
+  const fetchAuditLogs = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`${API_URL}/audit`, {
+        withCredentials: true,
+      });
+
+      if (response.data?.success) {
+        setLogs(response.data.logs);
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Failed to load audit logs");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAuditLogs();
+  }, [fetchAuditLogs]);
+
+  const columns: Column<AuditLogDB>[] = [
+    {
+      key: "id",
+      label: "Log ID",
+      render: (r) => (
+        <span className="font-mono text-[10px] text-muted-foreground">
+          {r.id.split("-")[0]}
+        </span>
+      ),
+    },
+    {
+      key: "event",
+      label: "Event",
+      sortable: true,
+      filterOptions: [...new Set(logs.map((l) => l.event))],
+      render: (r) => (
+        <Badge
+          variant={
+            r.event.includes("REJECTED")
+              ? "destructive"
+              : r.event.includes("APPROVED")
+                ? "default"
+                : "outline"
+          }
+        >
+          {r.event}
+        </Badge>
+      ),
+    },
+    {
+      key: "entity",
+      label: "Entity",
+      sortable: true,
+      render: (r) => (
+        <span className="font-medium text-xs uppercase">{r.entity}</span>
+      ),
+    },
+    {
+      key: "user",
+      label: "User / System",
+      render: (r) => (
+        <div className="flex flex-col">
+          <span className="font-medium text-sm">
+            {r.user?.fullName || "System Engine"}
+          </span>
+          <span className="text-[10px] text-muted-foreground">
+            {r.user?.email || "automated"}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: "entityId",
+      label: "Target ID",
+      render: (r) => (
+        <span className="font-mono text-xs flex items-center gap-1 text-primary">
+          {r.entityId ? (
+            <>
+              <Link2 className="h-3 w-3" /> {r.entityId.split("-")[0]}
+            </>
+          ) : (
+            "—"
+          )}
+        </span>
+      ),
+    },
+    {
+      key: "details",
+      label: "Details",
+      render: (r) => (
+        <span
+          className="text-xs text-muted-foreground max-w-[250px] truncate block"
+          title={JSON.stringify(r.details)}
+        >
+          {r.details?.action || "No additional details"}
+        </span>
+      ),
+    },
+    {
+      key: "createdAt",
+      label: "Timestamp",
+      sortable: true,
+      render: (r) => (
+        <span className="text-xs font-medium">
+          {new Date(r.createdAt).toLocaleString("en-IN")}
+        </span>
+      ),
+    },
   ];
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <p className="text-muted-foreground animate-pulse">
+            Retrieving secure audit trail...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title={t("auditTitle")} description={t("auditDesc")} />
+      <PageHeader
+        title="System Audit Trail"
+        description="Immutable log of all critical system events, compliance verifications, and user actions."
+      />
 
       <div className="grid gap-4 sm:grid-cols-4 mb-6">
-        <StatCard title={language === "hi" ? "कुल प्रविष्टियां" : "Total Entries"} value={ledger.length} icon={<Blocks className="h-6 w-6" />} />
-        <StatCard title={language === "hi" ? "अद्वितीय इकाइयां" : "Unique Entities"} value={new Set(ledger.map(l => l.entity)).size} icon={<Blocks className="h-6 w-6" />} />
-        <StatCard title={language === "hi" ? "नवीनतम ब्लॉक" : "Latest Block"} value={`#${ledger[0]?.blockNumber || 0}`} icon={<Blocks className="h-6 w-6" />} />
-        <StatCard title={language === "hi" ? "नेटवर्क" : "Network"} value="Hyperledger" subtitle={language === "hi" ? "5 पीयर नोड · Raft सर्वसम्मति" : "5 peer nodes · Raft consensus"} icon={<Blocks className="h-6 w-6" />} />
+        <StatCard
+          title="Total Events Logged"
+          value={logs.length}
+          icon={<FileClock className="h-6 w-6" />}
+        />
+        <StatCard
+          title="Unique Event Types"
+          value={new Set(logs.map((l) => l.event)).size}
+          icon={<Database className="h-6 w-6" />}
+        />
+        <StatCard
+          title="Verified Approvals"
+          value={logs.filter((l) => l.event === "PRODUCT_APPROVED").length}
+          icon={<ShieldAlert className="h-6 w-6 text-green-500" />}
+        />
+        <StatCard
+          title="Security Layer"
+          value="Active"
+          subtitle="MySQL Immutable Log"
+          icon={<ShieldAlert className="h-6 w-6 text-primary" />}
+        />
       </div>
 
       <Card>
         <CardContent className="p-6">
-          <DataTable data={ledger} columns={columns} searchKeys={["event", "entity", "user", "txHash"]} exportFilename="nmicov-audit-ledger" pageSize={15} />
+          <DataTable
+            data={logs}
+            columns={columns}
+            searchKeys={["event", "entity", "entityId"]}
+            exportFilename="nmicov-system-audit"
+            pageSize={15}
+          />
         </CardContent>
       </Card>
     </div>

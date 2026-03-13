@@ -12,6 +12,7 @@ import componentRoutes from "./routes/component.routes.js";
 import "./enrollAdmin.js"; // Ensure admin is enrolled at server startup
 import complianceRoutes from "./routes/compliance.routes.js";
 import filesRoutes from "./routes/file.routes.js";
+import auditRoutes from "./routes/audit.routes.js";
 
 export async function bootstrap(): Promise<void> {
   try {
@@ -71,6 +72,7 @@ export async function bootstrap(): Promise<void> {
   app.use("/api/components", componentRoutes);
   app.use("/api/compliance", complianceRoutes);
   app.use("/api/files", filesRoutes);
+  app.use("/api/audit", auditRoutes);
 
   app.listen(config.PORT, () =>
     console.log(

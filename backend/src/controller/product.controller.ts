@@ -3,6 +3,7 @@ import { sequelize } from "../config/db.js";
 import Product from "../models/product.model.js";
 import Supplier from "../models/supplier.model.js";
 import Component from "../models/component.model.js";
+import { User, AuditLog } from "../models/index.js";
 
 // Helper functions to clean strings into strict numbers
 const parseCurrency = (val: string | number) => {
@@ -38,7 +39,6 @@ export const productController = {
       const totalCost = parseCurrency(metadata.total_cost);
       const dvaScore = parsePercentage(metadata.dva_score);
 
-      // NEW: Extract Confidence and Risk from the updated AI payload
       const confidence = metadata.confidence_score
         ? parsePercentage(metadata.confidence_score)
         : null;
@@ -46,7 +46,6 @@ export const productController = {
         ? parsePercentage(metadata.risk_score)
         : null;
 
-      // Make in India Classification Logic
       let classification = "Non-Local";
       if (dvaScore >= 50) classification = "Class I";
       else if (dvaScore >= 20) classification = "Class II";
@@ -61,8 +60,8 @@ export const productController = {
           dvaScore: dvaScore,
           classification,
           status: "under_review",
-          confidence, // NEW
-          risk, // NEW
+          confidence,
+          risk,
         },
         { transaction: t },
       );
@@ -92,6 +91,24 @@ export const productController = {
 
       // 5. Update Supplier Product Count
       await supplier.increment("products_count", { by: 1, transaction: t });
+
+      // ✅ 6. CREATE AUDIT LOG (Inside the transaction to ensure strict compliance)
+      if (req.user?.id) {
+        await AuditLog.create(
+          {
+            event: "PRODUCT_CREATED",
+            entity: "Product",
+            entityId: newProduct.id,
+            userId: req.user.id,
+            details: {
+              action: "Product and BOM registered via AI Extraction",
+              dvaScore,
+              classification,
+            },
+          },
+          { transaction: t },
+        );
+      }
 
       // Commit the transaction
       await t.commit();
@@ -144,6 +161,13 @@ export const productController = {
               model: Supplier,
               as: "supplier",
               attributes: ["id", "gst", "sector"],
+              include: [
+                {
+                  model: User,
+                  as: "user",
+                  attributes: ["fullName"],
+                },
+              ],
             },
           ],
         });
@@ -195,6 +219,21 @@ export const productController = {
       product.status = "under_review";
       await product.save();
 
+      // ✅ CREATE AUDIT LOG
+      if (req.user?.id) {
+        await AuditLog.create({
+          event: "PRODUCT_SUBMITTED",
+          entity: "Product",
+          entityId: product.id,
+          userId: req.user.id,
+          details: {
+            action: "Supplier manually locked BOM for review.",
+            previousStatus: "draft",
+            newStatus: "under_review",
+          },
+        });
+      }
+
       return res.status(200).json({
         success: true,
         message: "BOM submitted successfully",
@@ -205,6 +244,78 @@ export const productController = {
       return res
         .status(500)
         .json({ success: false, message: "Failed to submit BOM" });
+    }
+  },
+
+  // --- VERIFY PRODUCT (PROCUREMENT ADMIN) ---
+  verifyProduct: async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { status, message } = req.body;
+
+      if (req.user?.role === "supplier") {
+        return res.status(403).json({
+          success: false,
+          message: "Unauthorized. Only admins can verify products.",
+        });
+      }
+
+      if (!status || !message) {
+        return res.status(400).json({
+          success: false,
+          message: "Status and verification message are required.",
+        });
+      }
+
+      const product = await Product.findByPk(id.toString());
+      if (!product) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Product not found" });
+      }
+
+      const previousStatus = product.status;
+
+      // Update product status
+      product.status = status; // "verified" or "non-compliant"
+
+      // Save the JSON log into MySQL
+      product.verificationLog = {
+        message,
+        status,
+        timestamp: new Date().toISOString(),
+        reviewedBy: req.user?.id,
+      };
+
+      await product.save();
+
+      // ✅ CREATE AUDIT LOG
+      if (req.user?.id) {
+        await AuditLog.create({
+          event:
+            status === "verified" ? "PRODUCT_APPROVED" : "PRODUCT_REJECTED",
+          entity: "Product",
+          entityId: product.id,
+          userId: req.user.id,
+          details: {
+            action: `Procurement admin marked product as ${status}`,
+            previousStatus,
+            newStatus: status,
+            adminNotes: message,
+          },
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Product verification log saved successfully",
+        product,
+      });
+    } catch (error: any) {
+      console.error("Verify Product Error:", error);
+      return res
+        .status(500)
+        .json({ success: false, message: "Failed to save verification log" });
     }
   },
 };

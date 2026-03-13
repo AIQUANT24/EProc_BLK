@@ -10,13 +10,14 @@ import EditSupplierDialog from "@/components/suppliers/EditSupplierDialog";
 import ViewSupplierDialog from "@/components/suppliers/ViewSupplierDialog";
 import DeleteConfirmDialog from "@/components/shared/DeleteConfirmDialog";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
-// Matches your controller's formattedSuppliers output
-interface SupplierDB {
+// Unified Interface matching the flattened data
+export interface SupplierDB {
   id: string;
-  name: string; // From userDetails.fullName
-  email: string; // From userDetails.email
-  status: "active" | "inactive" | "suspended"; // From userDetails.status
+  name: string;
+  email: string;
+  status: "active" | "inactive" | "suspended";
   gst: string;
   pan: string;
   udyam: string;
@@ -24,7 +25,7 @@ interface SupplierDB {
   state: string;
   msmeStatus: string;
   sector: string;
-  products: number;
+  products_count: number;
   createdAt: string;
 }
 
@@ -39,6 +40,7 @@ const Suppliers = () => {
   const [viewSupplier, setViewSupplier] = useState<SupplierDB | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<SupplierDB | null>(null);
 
+  const { user } = useAuth();
   // --- API: Fetch Suppliers ---
   const fetchSuppliers = useCallback(async () => {
     try {
@@ -47,8 +49,26 @@ const Suppliers = () => {
         credentials: "include",
       });
       const data = await response.json();
-      if (response.ok) {
-        setSuppliers(data.suppliers);
+
+      if (response.ok && data.success) {
+        // Flatten the nested backend response into the SupplierDB format
+        const formattedData: SupplierDB[] = data.suppliers.map((s: any) => ({
+          id: s.id,
+          name: s.user?.fullName || "Unknown",
+          email: s.user?.email || "Unknown",
+          status: s.user?.status || "active", // Default to active if status isn't returned
+          gst: s.gst,
+          pan: s.pan,
+          udyam: s.udyam,
+          location: s.location,
+          state: s.state,
+          msmeStatus: s.msme_status, // Map snake_case to camelCase
+          sector: s.sector,
+          products_count: s.products_count || 0,
+          createdAt: s.createdAt,
+        }));
+
+        setSuppliers(formattedData);
       } else {
         toast.error(data.message || "Failed to load suppliers");
       }
@@ -91,7 +111,7 @@ const Suppliers = () => {
       label: "ID",
       sortable: true,
       className: "font-mono text-[10px] w-24",
-      render: (r) => <span>{r.id.split("-")[0]}...</span>,
+      render: (r) => <span title={r.id}>{r.id.split("-")[0]}...</span>,
     },
     {
       key: "name",
@@ -128,10 +148,10 @@ const Suppliers = () => {
       filterOptions: ["Micro", "Small", "Medium", "Large"],
     },
     {
-      key: "products",
+      key: "products_count", // FIXED: use exact key so sorting works
       label: "Units",
       sortable: true,
-      render: (r) => <span className="font-medium">{r.products}</span>,
+      render: (r) => <span className="font-medium">{r.products_count}</span>,
     },
     {
       key: "status",
@@ -169,12 +189,14 @@ const Suppliers = () => {
         title="Supplier Directory"
         description={`${suppliers.length} registered suppliers across ${new Set(suppliers.map((s) => s.state)).size} states.`}
         actions={
-          <Button
-            className="gradient-primary text-primary-foreground gap-2"
-            onClick={() => setAddOpen(true)}
-          >
-            <Plus className="h-4 w-4" /> Add Supplier
-          </Button>
+          user.role === "admin" && (
+            <Button
+              className="gradient-primary text-primary-foreground gap-2"
+              onClick={() => setAddOpen(true)}
+            >
+              <Plus className="h-4 w-4" /> Add Supplier
+            </Button>
+          )
         }
       />
 
@@ -204,22 +226,27 @@ const Suppliers = () => {
                   >
                     <Eye className="h-3.5 w-3.5 text-primary" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={() => setEditSupplier(row)}
-                  >
-                    <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                    onClick={() => setDeleteTarget(row)}
-                  >
-                    <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                  </Button>
+
+                  {user?.role === "admin" && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={() => setEditSupplier(row)}
+                      >
+                        <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={() => setDeleteTarget(row)}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                      </Button>
+                    </>
+                  )}
                 </div>
               )}
             />
@@ -232,27 +259,27 @@ const Suppliers = () => {
         onOpenChange={setAddOpen}
         onSuccess={fetchSuppliers}
       />
-
       <EditSupplierDialog
         supplier={editSupplier}
         open={!!editSupplier}
         onOpenChange={(open) => !open && setEditSupplier(null)}
         onSuccess={fetchSuppliers}
       />
-
       <ViewSupplierDialog
         supplier={viewSupplier}
         open={!!viewSupplier}
         onOpenChange={(open) => !open && setViewSupplier(null)}
       />
-
-      <DeleteConfirmDialog
-        open={!!deleteTarget}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Supplier Profile"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? This will remove their business profile data permanently.`}
-        onConfirm={handleDelete}
-      />
+      {/* Only allow admin to delete a supplier */}
+      {user?.role === "admin" && (
+        <DeleteConfirmDialog
+          open={!!deleteTarget}
+          onOpenChange={(open) => !open && setDeleteTarget(null)}
+          title="Delete Supplier Profile"
+          description={`Are you sure you want to delete "${deleteTarget?.name}"? This will remove their business profile data permanently.`}
+          onConfirm={handleDelete}
+        />
+      )}
     </div>
   );
 };

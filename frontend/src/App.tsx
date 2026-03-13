@@ -23,7 +23,6 @@ import Compliance from "@/pages/Compliance";
 import Verification from "@/pages/Verification";
 import AuditLogs from "@/pages/AuditLogs";
 import UserManagement from "@/pages/UserManagement";
-import SettingsPage from "@/pages/SettingsPage";
 import NotFound from "@/pages/NotFound";
 import Index from "@/pages/Index";
 import Signup from "@/pages/Signup";
@@ -120,7 +119,6 @@ const App = () => (
                     <Route path="/verification" element={<Verification />} />
                     <Route path="/audit" element={<AuditLogs />} />
                     <Route path="/users" element={<UserManagement />} />
-                    <Route path="/settings" element={<SettingsPage />} />
                   </Route>
                 </Route>
 

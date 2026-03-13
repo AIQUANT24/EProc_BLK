@@ -1,4 +1,5 @@
-import { useMockData } from "@/contexts/MockDataContext";
+import { useState, useEffect, useCallback } from "react";
+import axios from "axios";
 import PageHeader from "@/components/shared/PageHeader";
 import StatCard from "@/components/shared/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,11 +18,91 @@ import {
   AlertTriangle,
   CheckCircle,
   ArrowUpRight,
+  Loader2,
 } from "lucide-react";
+import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
+
+const API_URL = import.meta.env.VITE_API_URL;
+
+interface AdminProduct {
+  id: string;
+  name: string;
+  dvaScore: number | null;
+  classification: string | null;
+  status: "draft" | "under_review" | "verified" | "active" | "archived";
+  risk: number | null;
+  createdAt: string;
+  supplier?: {
+    gst: string;
+    user?: {
+      fullName: string;
+    };
+  };
+}
+const CustomAlertTriangle: React.FC<{ title: string }> = ({ title }) => (
+  <AlertTriangle className="inline-block ml-2 h-3 w-3 text-red-500" />
+);
 
 const ProcurementDashboard = () => {
-  // Once backend is ready, replace useMockData with TanStack Query (useQuery)
-  const { compliance, verificationLogs, alerts } = useMockData();
+  const [products, setProducts] = useState<AdminProduct[]>([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
+
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(`${API_URL}/products`, {
+        withCredentials: true,
+      });
+
+      if (response.data?.success) {
+        // Filter out drafts, admins only care about submitted products
+        const submittedProducts = response.data.products.filter(
+          (p: AdminProduct) => p.status !== "draft",
+        );
+        setProducts(submittedProducts);
+      }
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.message || "Failed to load dashboard data",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  // --- KPI Calculations ---
+  const verifiedProducts = products.filter(
+    (p) => p.status === "verified" || p.status === "active",
+  ).length;
+  const pendingReviews = products.filter(
+    (p) => p.status === "under_review",
+  ).length;
+  const nonCompliant = products.filter(
+    (p) => p.classification === "Non-Local" || p.status === "archived",
+  ).length;
+  // High risk alerts triggered by AI (e.g. Risk score > 40%)
+  const activeAlerts = products.filter(
+    (p) => p.risk !== null && p.risk > 40,
+  ).length;
+
+  if (loading) {
+    return (
+      <div className="flex h-[60vh] items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+          <p className="text-muted-foreground animate-pulse">
+            Loading procurement data...
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="animate-fade-in space-y-8">
@@ -33,23 +114,23 @@ const ProcurementDashboard = () => {
       {/* KPI Overview */}
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Verified Suppliers"
-          value={compliance.filter((c) => c.status === "compliant").length}
+          title="Verified Products"
+          value={verifiedProducts}
           icon={<CheckCircle className="h-6 w-6 text-green-500" />}
         />
         <StatCard
           title="Pending Reviews"
-          value={compliance.filter((c) => c.status === "under-review").length}
+          value={pendingReviews}
           icon={<Search className="h-6 w-6 text-blue-500" />}
         />
         <StatCard
           title="Non-Compliant"
-          value={compliance.filter((c) => c.status === "non-compliant").length}
+          value={nonCompliant}
           icon={<ShieldCheck className="h-6 w-6 text-destructive" />}
         />
         <StatCard
-          title="Active Alerts"
-          value={alerts.filter((a) => !a.resolved).length}
+          title="AI Risk Alerts"
+          value={activeAlerts}
           icon={<AlertTriangle className="h-6 w-6 text-warning" />}
         />
       </div>
@@ -60,7 +141,10 @@ const ProcurementDashboard = () => {
           <CardTitle className="font-display text-xl">
             Recent Verification Requests
           </CardTitle>
-          <button className="text-sm text-primary font-medium hover:underline flex items-center gap-1">
+          <button
+            onClick={() => navigate("/verification")}
+            className="text-sm text-primary font-medium hover:underline flex items-center gap-1"
+          >
             View All <ArrowUpRight className="h-3 w-3" />
           </button>
         </CardHeader>
@@ -70,8 +154,7 @@ const ProcurementDashboard = () => {
               <TableHeader className="bg-muted/50">
                 <TableRow>
                   <TableHead className="font-semibold">Product</TableHead>
-                  <TableHead className="font-semibold">Supplier</TableHead>
-                  <TableHead className="font-semibold">Requested By</TableHead>
+                  <TableHead className="font-semibold">Supplier Name</TableHead>
                   <TableHead className="font-semibold">DVA Score</TableHead>
                   <TableHead className="font-semibold text-right">
                     Status
@@ -79,18 +162,23 @@ const ProcurementDashboard = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {verificationLogs.length > 0 ? (
-                  verificationLogs.map((v) => (
+                {products.length > 0 ? (
+                  // Show the newest 10 requests
+                  products.slice(0, 10).map((v) => (
                     <TableRow
                       key={v.id}
                       className="hover:bg-muted/30 transition-colors"
                     >
                       <TableCell className="font-medium">
-                        {v.productName}
+                        {v.name}
+                        {v.risk && v.risk > 40 && (
+                          <CustomAlertTriangle title="High Risk AI Alert" />
+                        )}
                       </TableCell>
-                      <TableCell>{v.supplierName}</TableCell>
-                      <TableCell className="text-muted-foreground">
-                        {v.requestedBy}
+                      <TableCell>
+                        {v.supplier?.user?.fullName ||
+                          v.supplier?.gst ||
+                          "Unknown"}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -98,10 +186,12 @@ const ProcurementDashboard = () => {
                             className={`font-bold ${
                               Number(v.dvaScore) >= 50
                                 ? "text-green-600"
-                                : "text-amber-600"
+                                : Number(v.dvaScore) >= 20
+                                  ? "text-amber-600"
+                                  : "text-red-600"
                             }`}
                           >
-                            {v.dvaScore}%
+                            {v.dvaScore !== null ? `${v.dvaScore}%` : "N/A"}
                           </span>
                         </div>
                       </TableCell>
@@ -109,14 +199,14 @@ const ProcurementDashboard = () => {
                         <Badge
                           className="capitalize"
                           variant={
-                            v.status === "verified"
+                            v.status === "verified" || v.status === "active"
                               ? "default"
-                              : v.status === "failed"
-                                ? "destructive"
-                                : "secondary"
+                              : v.status === "under_review"
+                                ? "secondary"
+                                : "destructive"
                           }
                         >
-                          {v.status}
+                          {v.status.replace("_", " ")}
                         </Badge>
                       </TableCell>
                     </TableRow>
@@ -124,7 +214,7 @@ const ProcurementDashboard = () => {
                 ) : (
                   <TableRow>
                     <TableCell
-                      colSpan={5}
+                      colSpan={4}
                       className="h-24 text-center text-muted-foreground"
                     >
                       No recent verification requests found.

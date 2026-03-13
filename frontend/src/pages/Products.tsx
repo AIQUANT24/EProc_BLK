@@ -269,14 +269,15 @@ const Products = () => {
         title="Registered Products"
         description={`${products.length} products total · ${products.filter((p) => p.status === "verified").length} verified`}
         actions={
-          (isProfileComplete && isSupplier) || user?.role === "admin" ? (
+          isProfileComplete &&
+          isSupplier && (
             <Button
               onClick={() => navigate("/products/new")}
               className="gradient-primary text-primary-foreground gap-2"
             >
               <Plus className="h-4 w-4" /> Register New Product
             </Button>
-          ) : null
+          )
         }
       />
 

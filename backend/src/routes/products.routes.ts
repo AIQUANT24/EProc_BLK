@@ -10,4 +10,7 @@ router.get("/", authenticateToken, productController.getProducts);
 // POST /api/products -> Creates a new product with OCR BOM processing
 router.post("/", authenticateToken, productController.createProductWithBOM);
 
+// Add this line to your routes file:
+router.put("/:id/verify", authenticateToken, productController.verifyProduct);
+
 export default router;

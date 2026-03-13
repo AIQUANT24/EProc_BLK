@@ -7,10 +7,8 @@ import ComplianceRecordModelClass, {
 import RiskAlertModelClass, { initRiskAlertModel } from "./riskAlert.model.js";
 import FileModelClass, { initFileModel } from "./files.model.js";
 
-import VerificationLogModelClass, {
-  initVerificationLogModel,
-} from "./verificationLog.model.js";
 import UserModelClass, { initUserModel } from "./user.model.js";
+import AuditModelClass, { initAuditModel } from "./audit.model.js";
 import { sequelize } from "../config/db.js";
 
 // Export actual Sequelize model types (NOT nullable)
@@ -20,10 +18,11 @@ export let Component = ComponentModelClass as typeof ComponentModelClass;
 export let ComplianceRecord =
   ComplianceRecordModelClass as typeof ComplianceRecordModelClass;
 export let RiskAlert = RiskAlertModelClass as typeof RiskAlertModelClass;
-export let VerificationLog =
-  VerificationLogModelClass as typeof VerificationLogModelClass;
+
 export let User = UserModelClass as typeof UserModelClass;
 export let File = FileModelClass as typeof FileModelClass;
+
+export let AuditLog = AuditModelClass as typeof AuditModelClass;
 
 let initialized = false;
 
@@ -35,9 +34,9 @@ export function initModels() {
       Component,
       ComplianceRecord,
       RiskAlert,
-      VerificationLog,
       User,
       File,
+      AuditLog,
     };
 
   // Initialize models using shared sequelize instance
@@ -46,9 +45,9 @@ export function initModels() {
   Component = initComponentModel(sequelize);
   ComplianceRecord = initComplianceRecordModel(sequelize);
   RiskAlert = initRiskAlertModel(sequelize);
-  VerificationLog = initVerificationLogModel(sequelize);
   User = initUserModel(sequelize);
-  File = initFileModel(sequelize); // <-- Initialized here
+  File = initFileModel(sequelize);
+  AuditLog = initAuditModel(sequelize);
 
   const models = {
     Supplier,
@@ -56,12 +55,12 @@ export function initModels() {
     Component,
     ComplianceRecord,
     RiskAlert,
-    VerificationLog,
     User,
     File,
+    AuditLog,
   };
 
-  // 🚀 OPTIMIZATION: Loop through all models to run associations automatically.
+  // OPTIMIZATION: Loop through all models to run associations automatically.
   // This guarantees you never forget to associate a new model like File or User!
   Object.values(models).forEach((model: any) => {
     if (typeof model.associate === "function") {
@@ -81,7 +80,7 @@ export {
   ComponentModelClass as ComponentModel,
   ComplianceRecordModelClass as ComplianceRecordModel,
   RiskAlertModelClass as RiskAlertModel,
-  VerificationLogModelClass as VerificationLogModel,
   UserModelClass as UserModel,
   FileModelClass as FileModel,
+  AuditModelClass as AuditLogModel,
 };

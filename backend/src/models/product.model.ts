@@ -1,5 +1,13 @@
 import { Model, DataTypes, Sequelize, Optional } from "sequelize";
 
+// Enhanced based on FRD Audit Trail requirements
+export interface VerificationLog {
+  message: string;
+  status: "verified" | "failed" | "pending";
+  reviewedBy?: string; // ID of the Admin/Procurement official who verified it
+  timestamp?: string; // When it was reviewed
+}
+
 // 1. All attributes matching your exact JSON structure
 interface ProductAttributes {
   id: string; // "PRD-001"
@@ -9,9 +17,18 @@ interface ProductAttributes {
   estimatedCost: number | null;
   dvaScore: number | null;
   classification: string | null; // "Class I", "Class II", etc.
-  status: "draft" | "active" | "archived" | "under_review" | "verified";
+  status:
+    | "draft"
+    | "active"
+    | "archived"
+    | "under_review"
+    | "verified"
+    | "compliant"
+    | "non-compliant"
+    | "under-review";
   confidence: number | null;
   risk: number | null;
+  verificationLog: VerificationLog | null; // <-- Standardized name
 }
 
 // 2. Optional attributes during .create()
@@ -25,6 +42,7 @@ interface ProductCreationAttributes extends Optional<
   | "status"
   | "confidence"
   | "risk"
+  | "verificationLog"
 > {}
 
 export default class Product
@@ -41,20 +59,20 @@ export default class Product
   public status!: "draft" | "active" | "archived" | "under_review" | "verified";
   public confidence!: number | null;
   public risk!: number | null;
+  public verificationLog!: VerificationLog | null; // <-- Standardized name
 
   // Associations
   static associate(models: any) {
-    // Product belongs to a Supplier
     Product.belongsTo(models.Supplier, {
       foreignKey: "supplierId",
       as: "supplier",
     });
 
-    // Keeping your existing compliance/BOM associations
     Product.hasMany(models.Component, {
       foreignKey: "productId",
       as: "components",
     });
+
     Product.hasMany(models.ComplianceRecord, {
       foreignKey: "productId",
       as: "complianceRecords",
@@ -71,7 +89,7 @@ export function initProductModel(sequelize: Sequelize) {
         primaryKey: true,
       },
       supplierId: {
-        type: DataTypes.STRING, // Matches the "SUP-001" format of your Supplier ID
+        type: DataTypes.STRING,
         allowNull: false,
         field: "supplier_id",
       },
@@ -112,6 +130,9 @@ export function initProductModel(sequelize: Sequelize) {
           "archived",
           "under_review",
           "verified",
+          "compliant",
+          "non-compliant",
+          "under-review",
         ),
         defaultValue: "draft",
         allowNull: false,
@@ -131,6 +152,12 @@ export function initProductModel(sequelize: Sequelize) {
           const value = this.getDataValue("risk");
           return value ? parseFloat(value.toString()) : null;
         },
+      },
+      // ADDED THIS BLOCK TO STORE THE LOG IN MYSQL AS JSON
+      verificationLog: {
+        type: DataTypes.JSON,
+        allowNull: true,
+        field: "verification_log",
       },
     },
     {

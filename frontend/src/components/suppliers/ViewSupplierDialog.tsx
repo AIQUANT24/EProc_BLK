@@ -16,23 +16,7 @@ import {
   Package,
   Activity,
 } from "lucide-react";
-
-// Use the interface that matches your database-joined supplier object
-interface SupplierDB {
-  id: string;
-  name: string; // From User fullName
-  email: string; // From User email
-  status: "active" | "inactive" | "suspended"; // From User status
-  gst: string;
-  pan: string;
-  udyam: string;
-  location: string;
-  state: string;
-  msmeStatus: string;
-  sector: string;
-  products: number; // The count from your Supplier table
-  createdAt: string;
-}
+import type { SupplierDB } from "@/pages/Suppliers"; // Import the unified interface
 
 interface ViewSupplierDialogProps {
   supplier: SupplierDB | null;
@@ -69,11 +53,7 @@ const ViewSupplierDialog = ({
 
   const formattedDate = new Date(supplier.createdAt).toLocaleDateString(
     "en-IN",
-    {
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    },
+    { day: "2-digit", month: "long", year: "numeric" },
   );
 
   return (
@@ -163,7 +143,8 @@ const ViewSupplierDialog = ({
                   Product Units
                 </span>
               </div>
-              <p className="text-2xl font-bold">{supplier.products}</p>
+              {/* FIXED: Using products_count from the mapped data */}
+              <p className="text-2xl font-bold">{supplier.products_count}</p>
             </div>
 
             <div className="p-4 rounded-xl border border-border bg-muted/20">

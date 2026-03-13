@@ -99,7 +99,7 @@ def print_step(text):
 
 def print_success(text):
     """Print success message"""
-    print(f"   ✅ {text}")
+    print(f"    {text}")
 
 def print_error(text):
     """Print error message"""
@@ -161,7 +161,7 @@ def install_package(name, version):
     elapsed = time.time() - start_time
     
     if code == 0:
-        print(f"✅ ({elapsed:.1f}s)")
+        print(f" ({elapsed:.1f}s)")
         return True
     else:
         print(f"❌")
@@ -332,7 +332,7 @@ for import_name, display_name in packages_to_test:
     try:
         module = importlib.import_module(import_name)
         version = getattr(module, '__version__', 'unknown')
-        print(f"  ✅ {display_name:<20} (v{version})")
+        print(f"   {display_name:<20} (v{version})")
         successful.append(display_name)
     except ImportError as e:
         print(f"  ❌ {display_name:<20} - Failed: {str(e)[:50]}")
@@ -430,7 +430,7 @@ def main():
         print(f"   2. Start your server: uvicorn api.main:app --reload")
         
         if verification_passed:
-            print(f"\n✅ All packages verified successfully!")
+            print(f"\n All packages verified successfully!")
         else:
             print(f"\n⚠️  Some packages failed verification")
             print(f"   Run this command to check manually:")

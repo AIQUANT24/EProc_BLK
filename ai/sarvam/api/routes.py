@@ -213,11 +213,11 @@ async def upload_and_extract(
 
         #  DVA Classification (your exact conditions)
         if dva_percentage >= 50:
-            classification = "class 1 local supplier"
+            classification = "class 1"
         elif dva_percentage >= 20:
-            classification = "class 2 local supplier"
+            classification = "class 2"
         else:
-            classification = "non local supplier"
+            classification = "non local"
 
         # Unit Cost Fraud Detection
         unit_cost_fraud = detect_unit_cost_fraud(extracted_data)

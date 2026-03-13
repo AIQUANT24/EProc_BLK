@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { sequelize } from "../config/db.js"; // Ensure .js extension if using ES modules
+import { sequelize } from "../config/db.js";
 import Product from "../models/product.model.js";
 import Supplier from "../models/supplier.model.js";
 import Component from "../models/component.model.js";
@@ -18,7 +18,6 @@ const parsePercentage = (val: string | number) => {
 export const productController = {
   // --- CREATE PRODUCT & BULK INSERT COMPONENTS ---
   createProductWithBOM: async (req: Request, res: Response) => {
-    // We use a transaction so if a component fails to save, the product isn't created empty
     const t = await sequelize.transaction();
 
     try {
@@ -34,10 +33,18 @@ export const productController = {
 
       const { name, category, ocrData } = req.body;
 
-      // 1. Extract Metadata and Calculate Classification
+      // 1. Extract Metadata and Calculate Scores
       const metadata = ocrData.metadata;
       const totalCost = parseCurrency(metadata.total_cost);
       const dvaScore = parsePercentage(metadata.dva_score);
+
+      // NEW: Extract Confidence and Risk from the updated AI payload
+      const confidence = metadata.confidence_score
+        ? parsePercentage(metadata.confidence_score)
+        : null;
+      const risk = metadata.risk_score
+        ? parsePercentage(metadata.risk_score)
+        : null;
 
       // Make in India Classification Logic
       let classification = "Non-Local";
@@ -53,16 +60,20 @@ export const productController = {
           estimatedCost: totalCost,
           dvaScore: dvaScore,
           classification,
-          status: "under_review", // Going straight to review since it's verified by human-in-the-loop
+          status: "under_review",
+          confidence, // NEW
+          risk, // NEW
         },
         { transaction: t },
       );
 
       // 3. Format Components from OCR Data
       const componentsToInsert = ocrData.data.map((item: any) => {
-        // The component name is the key (e.g., "watch", "cycle")
         const componentName = Object.keys(item.component)[0];
         const componentCost = parseCurrency(item.component[componentName]);
+        const parsedPercentage = item.percent_of_total
+          ? parsePercentage(item.percent_of_total)
+          : 0;
 
         return {
           productId: newProduct.id,
@@ -72,6 +83,7 @@ export const productController = {
             : componentName,
           origin: item.origin,
           cost: componentCost,
+          percentage: parsedPercentage,
         };
       });
 
@@ -84,15 +96,12 @@ export const productController = {
       // Commit the transaction
       await t.commit();
 
-      // Insert into the hyperledger as well
-
       return res.status(201).json({
         success: true,
         message: "Product and BOM processed successfully",
         product: newProduct,
       });
     } catch (error: any) {
-      // If anything fails, rollback the database to prevent orphaned data
       await t.rollback();
       console.error("BOM Processing Error:", error);
       return res
@@ -110,7 +119,6 @@ export const productController = {
       let products = [];
 
       if (userRole === "supplier") {
-        // 1. Find the specific supplier profile for this logged-in user
         const supplier = await Supplier.findOne({
           where: { user_id: userId },
         });
@@ -124,13 +132,11 @@ export const productController = {
           });
         }
 
-        // 2. Fetch only the products belonging to this specific supplier
         products = await Product.findAll({
           where: { supplierId: supplier.id },
           order: [["createdAt", "DESC"]],
         });
       } else {
-        // 3. For Admins/Procurement: Fetch ALL products
         products = await Product.findAll({
           order: [["createdAt", "DESC"]],
           include: [

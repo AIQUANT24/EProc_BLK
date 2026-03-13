@@ -29,7 +29,9 @@ import {
   Trash2,
   PlusCircle,
   Bot,
+  AlertTriangle,
 } from "lucide-react";
+import { Badge } from "../ui/badge";
 
 const API_URL = import.meta.env.VITE_API_URL;
 const AI_URL = import.meta.env.VITE_AI_URL || "http://localhost:8000/api";
@@ -46,14 +48,12 @@ const SECTORS = [
   "Metallurgy",
 ];
 
-// Helper to clean currency strings from the AI
 const parseCurrency = (val: string | number) => {
   if (typeof val === "number") return val;
   const cleaned = val.replace(/[^0-9.-]+/g, "");
   return parseFloat(cleaned) || 0;
 };
 
-// Helper to generate a SHA-256 hash of the BOM data for the Blockchain
 const generateBOMHash = async (componentsData: any) => {
   const encoder = new TextEncoder();
   const data = encoder.encode(JSON.stringify(componentsData));
@@ -68,6 +68,7 @@ interface EditableComponent {
   cost: number;
   origin: "domestic" | "imported";
   supplierName: string;
+  fraudDetected: boolean;
 }
 
 const NewProduct = () => {
@@ -77,12 +78,16 @@ const NewProduct = () => {
   const [saving, setSaving] = useState(false);
   const [file, setFile] = useState<File | null>(null);
 
-  const [formData, setFormData] = useState({
-    name: "",
-    category: "",
-  });
-
+  const [formData, setFormData] = useState({ name: "", category: "" });
   const [components, setComponents] = useState<EditableComponent[]>([]);
+
+  // NEW: State to hold AI metadata temporarily
+  const [aiMetadata, setAiMetadata] = useState({
+    confidence: "0%",
+    risk: "0%",
+    fraudItems: 0,
+    fraudMessage: "",
+  });
 
   // --- STEP 1: AI EXTRACTION ---
   const handleExtractBOM = async (e: React.FormEvent) => {
@@ -110,6 +115,24 @@ const NewProduct = () => {
       );
 
       const extractedData = aiResponse.data.data;
+      const metadata = aiResponse.data.metadata;
+
+      // Extract Risk & Confidence
+      const hasFraud = metadata.fraud_summary?.fraud_items > 0;
+      setAiMetadata({
+        confidence: metadata.confidence_score || "0%",
+        risk: metadata.unit_cost_fraud?.risk || "0%",
+        fraudItems: metadata.fraud_summary?.fraud_items || 0,
+        fraudMessage: metadata.unit_cost_fraud?.message || "",
+      });
+
+      if (hasFraud) {
+        toast.warning(
+          `Attention: AI flagged ${metadata.fraud_summary.fraud_items} potential anomalies.`,
+        );
+      } else {
+        toast.success("Data extracted successfully!", { id: "ai-toast" });
+      }
 
       const editableItems: EditableComponent[] = extractedData.map(
         (item: any) => {
@@ -124,14 +147,12 @@ const NewProduct = () => {
                 ? "imported"
                 : "domestic",
             supplierName: item.supplier || "",
+            fraudDetected: item.fraud_detected || false,
           };
         },
       );
 
       setComponents(editableItems);
-      toast.success("Data extracted! Please review and confirm.", {
-        id: "ai-toast",
-      });
       setStep(2);
     } catch (err: any) {
       toast.error(
@@ -168,6 +189,7 @@ const NewProduct = () => {
         cost: 0,
         origin: "domestic",
         supplierName: "",
+        fraudDetected: false,
       },
     ]);
   };
@@ -182,6 +204,7 @@ const NewProduct = () => {
         .reduce((sum, c) => sum + Number(c.cost), 0);
       const dvaScore = totalCost > 0 ? (domesticCost / totalCost) * 100 : 0;
 
+      // Map back to the exact JSON structure your DB controller is expecting
       const reconstructedOcrData = {
         data: components.map((c) => ({
           supplier: c.supplierName,
@@ -196,10 +219,12 @@ const NewProduct = () => {
           total_cost: totalCost.toString(),
           domestic_cost: domesticCost.toString(),
           dva_score: `${dvaScore.toFixed(1)}%`,
+          confidence_score: aiMetadata.confidence, // Pass through AI generated metrics
+          risk_score: aiMetadata.risk, // Pass through AI generated metrics
         },
       };
 
-      // 1. Send structured data to MySQL Database
+      // 1. Save to MySQL
       const response = await axios.post(
         `${API_URL}/products`,
         {
@@ -214,7 +239,7 @@ const NewProduct = () => {
         const newProductId = response.data.product.id;
         const supplierId = response.data.product.supplierId;
 
-        // 2. Upload the physical BOM file to the database
+        // 2. Upload Document
         if (file) {
           const fileFormData = new FormData();
           fileFormData.append("file", file);
@@ -227,26 +252,19 @@ const NewProduct = () => {
             });
           } catch (fileErr) {
             console.error("Document upload failed", fileErr);
-            toast.warning("Product saved, but document upload failed.");
           }
         }
 
-        // 3. Anchor Compliance Record to Hyperledger Fabric
+        // 3. Anchor to Hyperledger
         try {
           toast.loading("Anchoring compliance record to blockchain...", {
             id: "ledger",
           });
-
           const bomHash = await generateBOMHash(reconstructedOcrData);
 
           await axios.post(
-            `${API_URL}/compliance/product`, // Adjust this route if your compliance router is mounted differently
-            {
-              supplierId,
-              productId: newProductId,
-              bomHash,
-              dva: dvaScore,
-            },
+            `${API_URL}/compliance/product`,
+            { supplierId, productId: newProductId, bomHash, dva: dvaScore },
             { withCredentials: true },
           );
 
@@ -254,7 +272,6 @@ const NewProduct = () => {
             id: "ledger",
           });
         } catch (bcErr) {
-          console.error("Blockchain error", bcErr);
           toast.error("Database saved, but failed to anchor to blockchain.", {
             id: "ledger",
           });
@@ -388,28 +405,58 @@ const NewProduct = () => {
       {step === 2 && (
         <Card className="shadow-lg border-primary/20">
           <CardHeader className="bg-primary/5 border-b border-primary/10">
-            <CardTitle className="text-2xl font-display flex items-center gap-2">
-              <Bot className="h-6 w-6 text-primary" /> Review AI Extraction
-            </CardTitle>
-            <CardDescription>
-              Please verify the components extracted from{" "}
-              <strong>{file?.name}</strong>. Correct any missing or inaccurate
-              data before saving.
-            </CardDescription>
+            <div className="flex justify-between items-start">
+              <div>
+                <CardTitle className="text-2xl font-display flex items-center gap-2">
+                  <Bot className="h-6 w-6 text-primary" /> Review AI Extraction
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  Verify components from <strong>{file?.name}</strong>. Correct
+                  inaccuracies before saving.
+                </CardDescription>
+              </div>
+              <div className="text-right">
+                <Badge variant="outline" className="text-xs">
+                  AI Confidence: {aiMetadata.confidence}
+                </Badge>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="pt-6 space-y-4">
+            {/* Fraud Warning Banner */}
+            {aiMetadata.fraudItems > 0 && (
+              <div className="mb-4 flex items-start gap-3 bg-red-50 text-red-900 p-4 rounded-lg border border-red-200 text-sm">
+                <AlertTriangle className="h-5 w-5 text-red-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold text-red-800 mb-1">
+                    AI flagged {aiMetadata.fraudItems} potential anomalies
+                  </p>
+                  <p>{aiMetadata.fraudMessage}</p>
+                  <p className="mt-2 font-medium text-xs">
+                    Please correct the highlighted fields below.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Editable Grid Header */}
             <div className="hidden md:grid grid-cols-12 gap-4 px-2 text-sm font-semibold text-muted-foreground">
               <div className="col-span-3">Component Name</div>
-              <div className="col-span-3">Manufacturer / Supplier</div>
+              <div className="col-span-3">Manufacturer</div>
               <div className="col-span-2">Origin</div>
               <div className="col-span-3">Cost (₹)</div>
               <div className="col-span-1 text-center">Action</div>
             </div>
 
+            {/* Editable Rows */}
             {components.map((comp, index) => (
               <div
                 key={comp.id}
-                className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center bg-muted/30 p-3 rounded-lg border border-border/50"
+                className={`grid grid-cols-1 md:grid-cols-12 gap-3 items-center p-3 rounded-lg border ${
+                  comp.fraudDetected
+                    ? "bg-red-50 border-red-300 ring-1 ring-red-200"
+                    : "bg-muted/30 border-border/50"
+                }`}
               >
                 <div className="col-span-3">
                   <Input

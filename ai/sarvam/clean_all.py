@@ -78,7 +78,7 @@ def main():
         print("\n⚠️  WARNING: This will DELETE ALL packages from your virtual environment!")
         response = input("\nAre you sure you want to continue? (y/N): ")
         if response.lower() != 'y':
-            print("\n❌ Cancelled")
+            print("\n Cancelled")
             sys.exit(0)
         
         # Create backup
@@ -86,7 +86,7 @@ def main():
         backup_file = f"requirements.backup.{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.txt"
         stdout, stderr, code = run_command(f"pip freeze > {backup_file}")
         if code == 0 and Path(backup_file).exists():
-            print(f"✅ Backup created: {backup_file}")
+            print(f"Backup created: {backup_file}")
         else:
             print(f"⚠️  Backup failed: {stderr}")
         
@@ -102,19 +102,19 @@ def main():
             
             stdout, stderr, code = run_command(cmd, capture=False)
             if code == 0:
-                print("✅ All packages uninstalled successfully")
+                print("All packages uninstalled successfully")
             else:
                 print(f"⚠️  Some errors occurred during uninstallation")
                 if stderr:
                     print(f"Error: {stderr[:200]}")
         else:
-            print("✅ No packages to uninstall")
+            print("No packages to uninstall")
         
         # Verify cleanup
         print_step("Verifying cleanup")
         remaining = get_installed_packages()
         if not remaining:
-            print("✅ Environment is completely clean!")
+            print("Environment is completely clean!")
         else:
             print(f"⚠️  {len(remaining)} packages remain:")
             for pkg in remaining:

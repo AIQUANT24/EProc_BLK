@@ -2,12 +2,12 @@
 
 ## Document Control
 
-| Field | Value |
-|-------|-------|
+| Field          | Value                         |
+| -------------- | ----------------------------- |
 | Document Title | Phase 2 Implementation Report |
-| Version | 1.1 |
-| Status | Complete |
-| Last Updated | 2026-03-09 |
+| Version        | 1.1                           |
+| Status         | Complete                      |
+| Last Updated   | 2026-03-09                    |
 
 ---
 
@@ -17,15 +17,15 @@ Phase 2 implements **real business logic** into the Phase 1 UI scaffolding. All 
 
 ### Modules Delivered
 
-| Module | Status | Engine |
-|--------|--------|--------|
-| DVA Calculation Engine | ✅ Complete | `src/lib/dva-engine.ts` |
-| Fraud Detection Engine | ✅ Complete | `src/lib/fraud-engine.ts` |
-| Blockchain Ledger Simulation | ✅ Complete | `src/lib/blockchain-sim.ts` |
-| Verification API Simulation | ✅ Complete | Integrated in MockDataContext |
-| Compliance Classification | ✅ Complete | Auto-classification from DVA |
-| What-If Analysis | ✅ Complete | BOM Management page |
-| Confidence Scoring | ✅ Complete | 5-factor weighted model |
+| Module                       | Status   | Engine                        |
+| ---------------------------- | -------- | ----------------------------- |
+| DVA Calculation Engine       | Complete | `src/lib/dva-engine.ts`       |
+| Fraud Detection Engine       | Complete | `src/lib/fraud-engine.ts`     |
+| Blockchain Ledger Simulation | Complete | `src/lib/blockchain-sim.ts`   |
+| Verification API Simulation  | Complete | Integrated in MockDataContext |
+| Compliance Classification    | Complete | Auto-classification from DVA  |
+| What-If Analysis             | Complete | BOM Management page           |
+| Confidence Scoring           | Complete | 5-factor weighted model       |
 
 ---
 
@@ -41,23 +41,23 @@ DVA% = (Σ Domestic Component Costs / Σ Total Component Costs) × 100
 
 ### Classification
 
-| Category | DVA Threshold |
-|----------|--------------|
-| Class I  | ≥ 50% |
-| Class II | ≥ 20% and < 50% |
-| Non-Local | < 20% |
+| Category  | DVA Threshold   |
+| --------- | --------------- |
+| Class I   | ≥ 50%           |
+| Class II  | ≥ 20% and < 50% |
+| Non-Local | < 20%           |
 
 ### Confidence Score Model
 
 The confidence score quantifies verification depth for each DVA calculation:
 
-| Factor | Weight | Data Source |
-|--------|--------|-------------|
-| GST Verification | 20% | GSTN API |
-| Customs Data Correlation | 30% | ICEGATE |
-| Manufacturing License | 20% | Factory Registry |
-| Historical Consistency | 15% | Platform History |
-| Third-Party Audit | 15% | Audit Records |
+| Factor                   | Weight | Data Source      |
+| ------------------------ | ------ | ---------------- |
+| GST Verification         | 20%    | GSTN API         |
+| Customs Data Correlation | 30%    | ICEGATE          |
+| Manufacturing License    | 20%    | Factory Registry |
+| Historical Consistency   | 15%    | Platform History |
+| Third-Party Audit        | 15%    | Audit Records    |
 
 **Confidence = Σ (factor_verification_ratio × factor_weight)**
 
@@ -72,6 +72,7 @@ Where `threshold_proximity` measures distance from classification boundaries (50
 ### What-If Analysis
 
 Allows suppliers and officers to simulate DVA impact by changing:
+
 - Component origin (domestic ↔ imported)
 - Component cost
 
@@ -83,14 +84,14 @@ Allows suppliers and officers to simulate DVA impact by changing:
 
 ### Rule-Based Detection (6 Rules)
 
-| Rule ID | Rule Name | Severity | Trigger Condition |
-|---------|-----------|----------|-------------------|
-| FR-01 | DVA Jump Detection | High | DVA changes > 15% between declarations |
-| FR-02 | Post-Bid BOM Change | High | BOM modified after bid submission |
-| FR-03 | Import Mismatch | High | Component claimed domestic, import evidence found |
-| FR-04 | Cost Anomaly | Medium | Imported cost > 60% of total BOM |
-| FR-05 | Circular Supply | Medium | 3+ components sourced in-house |
-| FR-06 | Missing Cost Data | Low | Components with zero/missing cost |
+| Rule ID | Rule Name           | Severity | Trigger Condition                                 |
+| ------- | ------------------- | -------- | ------------------------------------------------- |
+| FR-01   | DVA Jump Detection  | High     | DVA changes > 15% between declarations            |
+| FR-02   | Post-Bid BOM Change | High     | BOM modified after bid submission                 |
+| FR-03   | Import Mismatch     | High     | Component claimed domestic, import evidence found |
+| FR-04   | Cost Anomaly        | Medium   | Imported cost > 60% of total BOM                  |
+| FR-05   | Circular Supply     | Medium   | 3+ components sourced in-house                    |
+| FR-06   | Missing Cost Data   | Low      | Components with zero/missing cost                 |
 
 ### Alert Lifecycle
 
@@ -106,23 +107,23 @@ Allows suppliers and officers to simulate DVA impact by changing:
 
 ### Simulated Hyperledger Fabric Network
 
-| Parameter | Value |
-|-----------|-------|
-| Platform | Hyperledger Fabric (simulated) |
+| Parameter  | Value                                     |
+| ---------- | ----------------------------------------- |
+| Platform   | Hyperledger Fabric (simulated)            |
 | Peer Nodes | 5 (DPIIT, GeM, CAG, Ministries, Auditors) |
-| Consensus | Raft |
+| Consensus  | Raft                                      |
 
 ### Ledger Entry Structure
 
-| Field | Description |
-|-------|-------------|
-| Block Number | Monotonically incrementing |
-| Event | Action type (BOM Submitted, DVA Calculated, etc.) |
-| Entity | Product/Supplier ID |
-| Tx Hash | Simulated transaction hash |
-| Data Hash | SHA-256 simulation of payload |
-| Previous Hash | Chain linkage to previous entry |
-| Timestamp | ISO 8601 |
+| Field         | Description                                       |
+| ------------- | ------------------------------------------------- |
+| Block Number  | Monotonically incrementing                        |
+| Event         | Action type (BOM Submitted, DVA Calculated, etc.) |
+| Entity        | Product/Supplier ID                               |
+| Tx Hash       | Simulated transaction hash                        |
+| Data Hash     | SHA-256 simulation of payload                     |
+| Previous Hash | Chain linkage to previous entry                   |
+| Timestamp     | ISO 8601                                          |
 
 ### Anchored Events
 
@@ -172,11 +173,11 @@ POST /api/v1/verify
 
 ### Status Mapping
 
-| Condition | Status |
-|-----------|--------|
-| Non-Local classification | `FAILED` |
-| Risk score > 0.3 | `PENDING` |
-| Otherwise | `VERIFIED` |
+| Condition                | Status     |
+| ------------------------ | ---------- |
+| Non-Local classification | `FAILED`   |
+| Risk score > 0.3         | `PENDING`  |
+| Otherwise                | `VERIFIED` |
 
 ---
 
@@ -184,13 +185,13 @@ POST /api/v1/verify
 
 ### Coverage: 42 Tests, 5 Test Files
 
-| Test File | Tests | Scope |
-|-----------|-------|-------|
-| `dva-engine.test.ts` | 15 | DVA calculation, classification, confidence, what-if |
-| `fraud-engine.test.ts` | 11 | All 6 fraud rules, multi-rule triggering |
-| `blockchain-sim.test.ts` | 7 | Ledger entry creation, chain linkage, uniqueness |
-| `integration-flow.test.ts` | 8 | DVA → Classification → Compliance flow |
-| `example.test.ts` | 1 | Setup verification |
+| Test File                  | Tests | Scope                                                |
+| -------------------------- | ----- | ---------------------------------------------------- |
+| `dva-engine.test.ts`       | 15    | DVA calculation, classification, confidence, what-if |
+| `fraud-engine.test.ts`     | 11    | All 6 fraud rules, multi-rule triggering             |
+| `blockchain-sim.test.ts`   | 7     | Ledger entry creation, chain linkage, uniqueness     |
+| `integration-flow.test.ts` | 8     | DVA → Classification → Compliance flow               |
+| `example.test.ts`          | 1     | Setup verification                                   |
 
 ### Key Test Scenarios
 
@@ -205,25 +206,25 @@ POST /api/v1/verify
 
 ## 7. Enhanced Pages
 
-| Page | Phase 2 Enhancements |
-|------|---------------------|
+| Page               | Phase 2 Enhancements                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------- |
 | **BOM Management** | Calculate DVA button, Run Fraud Check, Submit & Lock BOM, What-If Analysis mode, confidence breakdown |
-| **DVA Results** | Confidence scores, blockchain tx hashes, DVA vs Confidence chart |
-| **Compliance** | Confidence/risk columns, average confidence stat, blockchain tx hashes |
-| **Risk Alerts** | Fraud rule reference panel, resolve button with ledger anchoring, rule IDs, details |
-| **Verification** | Product selector, requester dropdown, full API response with blockchain hash |
-| **Audit Logs** | Dynamic ledger from all actions, block numbers, data hashes, previous hash chain |
+| **DVA Results**    | Confidence scores, blockchain tx hashes, DVA vs Confidence chart                                      |
+| **Compliance**     | Confidence/risk columns, average confidence stat, blockchain tx hashes                                |
+| **Risk Alerts**    | Fraud rule reference panel, resolve button with ledger anchoring, rule IDs, details                   |
+| **Verification**   | Product selector, requester dropdown, full API response with blockchain hash                          |
+| **Audit Logs**     | Dynamic ledger from all actions, block numbers, data hashes, previous hash chain                      |
 
 ---
 
 ## 8. Phase 3 Roadmap
 
-| Feature | Priority | Dependency |
-|---------|----------|------------|
-| GeM Live Integration | P1 | API access |
-| GSTN Supply Chain Validation | P1 | GSTN API |
-| Customs ICEGATE Correlation | P1 | ICEGATE access |
-| AI Fraud Detection (ML models) | P2 | Training data |
-| Supply Chain Graph Analytics | P2 | Graph DB |
-| Policy Simulation Engine | P2 | Threshold config |
-| National Component Registry | P3 | Multi-ministry coordination |
+| Feature                        | Priority | Dependency                  |
+| ------------------------------ | -------- | --------------------------- |
+| GeM Live Integration           | P1       | API access                  |
+| GSTN Supply Chain Validation   | P1       | GSTN API                    |
+| Customs ICEGATE Correlation    | P1       | ICEGATE access              |
+| AI Fraud Detection (ML models) | P2       | Training data               |
+| Supply Chain Graph Analytics   | P2       | Graph DB                    |
+| Policy Simulation Engine       | P2       | Threshold config            |
+| National Component Registry    | P3       | Multi-ministry coordination |

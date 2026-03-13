@@ -128,7 +128,7 @@ def main():
     # Virtual Environment
     venv_info = check_venv()
     print(f"\n📌 VIRTUAL ENVIRONMENT:")
-    print(f"   Active: {'✅ YES' if venv_info['in_venv'] else '❌ NO'}")
+    print(f"   Active: {' YES' if venv_info['in_venv'] else '❌ NO'}")
     if venv_info['in_venv']:
         print(f"   Venv Path: {venv_info['venv_path']}")
     
@@ -141,7 +141,7 @@ def main():
     total_count = len(packages)
     
     for package, info in packages.items():
-        status = "✅" if info['installed'] else "❌"
+        status = "" if info['installed'] else "❌"
         version = f"v{info['version']}" if info['installed'] else "NOT INSTALLED"
         print(f"   {status} {package:<20} {version}")
     
@@ -151,7 +151,7 @@ def main():
     print("\n📌 PROJECT FILES:")
     files = check_critical_files()
     for name, info in files.items():
-        status = "✅" if info['exists'] else "❌"
+        status = "" if info['exists'] else "❌"
         print(f"   {status} {name:<20} {info['path']}")
     
     # Generate requirements
@@ -190,7 +190,7 @@ def main():
         print("\n💡 Install missing packages with:")
         print(f"   pip install {' '.join(missing)}")
     else:
-        print("\n✅ All required packages are installed!")
+        print("\n All required packages are installed!")
     
     print("="*60 + "\n")
 
